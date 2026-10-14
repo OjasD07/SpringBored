@@ -39,36 +39,36 @@
   }
 
   // ─── STEP 1: Open the Contents / TOC sidebar tab ──────────────────────────
-  // Real DOM: the TOC is already in the DOM as div.viewer-toc-container.
-  // It may be hidden behind a tab — find the tab whose label includes "content".
+  // Target the "Contents" tab shown in the top-right tab bar ([AI] [Contents] [Book])
   async function openContentsTab() {
-    log('Opening Contents tab...');
+    log('Ensuring Contents tab is open...');
 
-    // Real container confirmed from live DOM
-    const tocContainer = document.querySelector('.viewer-toc-container');
-    if (tocContainer) {
-      const style = window.getComputedStyle(tocContainer);
-      if (style.display !== 'none' && style.visibility !== 'hidden') {
-        log('TOC already visible');
+    const allTabEls = [
+      ...document.querySelectorAll('[role="tab"], .mat-tab-label, .mat-tab-label-content, button')
+    ];
+
+    for (const el of allTabEls) {
+      const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+      const cls = (el.className?.toString() || '').toLowerCase();
+      // Never click next/prev navigation buttons
+      if (aria.includes('next') || aria.includes('prev') || cls.includes('navigation-btn')) continue;
+
+      const text = (el.textContent || '').trim();
+      if (/^contents?$/i.test(text) || /^contents?$/i.test(aria) || (text.toLowerCase().startsWith('content') && text.length < 15)) {
+        const tab = el.closest('[role="tab"], .mat-tab-label') || el;
+        const isSelected = tab.getAttribute('aria-selected') === 'true' || tab.classList.contains('mat-tab-label-active');
+        if (!isSelected) {
+          log('Clicking Contents tab: ' + text);
+          tab.click();
+          await sleep(1000);
+        } else {
+          log('Contents tab is already active');
+        }
         return true;
       }
     }
 
-    // Try to click a tab button that reveals it
-    const allBtns = [...document.querySelectorAll('button, [role="tab"]')];
-    for (const btn of allBtns) {
-      const label = (
-        btn.getAttribute('aria-label') || btn.title || btn.textContent || ''
-      ).toLowerCase();
-      if (label.includes('content') && !label.includes('information')) {
-        log('Clicking Contents tab: ' + label);
-        btn.click();
-        await sleep(1200);
-        return true;
-      }
-    }
-
-    log('TOC tab not found — assuming already visible');
+    log('Contents tab not found — assuming already visible');
     return true;
   }
 
@@ -91,7 +91,8 @@
       log(`Pass ${pass + 1}: expanding ${collapsedFolders.length} folder(s)`);
 
       for (const folder of collapsedFolders) {
-        folder.click();
+        const toggle = folder.querySelector('mat-icon.toc-expand-icon, button') || folder;
+        toggle.click();
         await sleep(350);
       }
       await sleep(500);
@@ -321,7 +322,7 @@
     await expandAllFolders();
 
     // 3. Collect lessons
-    const lessons = collectLessons();
+    let lessons = collectLessons();
     log(`${lessons.length} lesson items found`);
 
     if (lessons.length === 0) {
@@ -341,14 +342,26 @@
       if (!isRunning) break;
       while (isPaused) { await sleep(400); }
 
-      const lesson = lessons[i];
+      // Ensure Contents tab is open & folders expanded between modules
+      await openContentsTab();
+      await expandAllFolders();
+
+      // Refresh list if new folders opened
+      const currentList = collectLessons();
+      if (currentList.length > lessons.length) {
+        lessons = currentList;
+      }
+
+      const lesson = (lessons[i]?.id && document.getElementById(lessons[i].id)) || lessons[i];
+      if (!lesson) continue;
+
       const title  = lesson.textContent.trim().replace(/\s+/g, ' ').slice(0, 60);
 
       // Skip assignments
       if (isAssignment(lesson)) {
         log(`⏭ Skipping assignment: "${title}"`);
         skipped++;
-        sendStatus({ status: 'running', message: `Skipping: ${title}`, completed, total, skipped });
+        sendStatus({ status: 'running', message: `Skipping: ${title}`, completed, total: lessons.length, skipped });
         continue;
       }
 
@@ -356,14 +369,15 @@
       if (isCompleted(lesson)) {
         log(`✓ Already done: "${title}"`);
         completed++;
-        sendStatus({ status: 'running', message: `Already done: ${title}`, completed, total, skipped });
+        sendStatus({ status: 'running', message: `Already done: ${title}`, completed, total: lessons.length, skipped });
         continue;
       }
 
-      log(`▶ [${i + 1}/${total}] "${title}"`);
-      sendStatus({ status: 'running', message: `[${i + 1}/${total}] ${title}`, completed, total, skipped });
+      log(`▶ [${i + 1}/${lessons.length}] "${title}"`);
+      sendStatus({ status: 'running', message: `[${i + 1}/${lessons.length}] ${title}`, completed, total: lessons.length, skipped });
 
       // Click the lesson in the sidebar
+      try { lesson.scrollIntoView({ block: 'nearest' }); } catch (_) {}
       lesson.click();
       await sleep(2800); // allow SPA to load content
 
@@ -374,7 +388,7 @@
       await clickNextButton();
 
       completed++;
-      sendStatus({ status: 'running', message: `✓ Done: ${title}`, completed, total, skipped });
+      sendStatus({ status: 'running', message: `✓ Done: ${title}`, completed, total: lessons.length, skipped });
 
       // Short breathe between lessons
       await sleep(1200);
