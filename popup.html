@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpringBored</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-wrap">
+        <div class="logo-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="title">SpringBored</h1>
+          <p class="subtitle">Infosys Springboard Auto-Completer</p>
+        </div>
+      </div>
+      <div class="status-dot" id="statusDot"></div>
+    </header>
+
+    <!-- Status Card -->
+    <div class="status-card" id="statusCard">
+      <div class="status-icon" id="statusIcon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+          <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <p class="status-text" id="statusText">Ready to automate your course</p>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-section" id="progressSection" style="display:none;">
+      <div class="progress-labels">
+        <span class="prog-label">Progress</span>
+        <span class="prog-count" id="progCount">0 / 0</span>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progressFill" style="width: 0%"></div>
+      </div>
+      <div class="progress-meta">
+        <span class="meta-badge skip" id="skipBadge">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18L18 6M6 6l12 12"/></svg>
+          <span id="skipCount">0</span> skipped
+        </span>
+        <span class="meta-badge done" id="doneBadge">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M5 13l4 4L19 7"/></svg>
+          <span id="doneCount">0</span> done
+        </span>
+      </div>
+    </div>
+
+    <!-- Log Feed -->
+    <div class="log-section">
+      <div class="log-header">
+        <span>Activity Log</span>
+        <button class="clear-btn" id="clearLog">Clear</button>
+      </div>
+      <div class="log-feed" id="logFeed">
+        <div class="log-entry idle">Navigate to a course page and press Start</div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button class="btn btn-start" id="btnStart">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        Start
+      </button>
+      <button class="btn btn-pause" id="btnPause" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        Pause
+      </button>
+      <button class="btn btn-stop" id="btnStop" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+        Stop
+      </button>
+    </div>
+
+    <!-- Warning -->
+    <div class="warning">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
+      Keep this tab active while running. Assignments are skipped automatically.
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

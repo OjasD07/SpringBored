@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "SpringBored",
+  "version": "1.0.0",
+  "description": "Auto-completes Infosys Springboard courses by navigating through all lessons automatically.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.onwingspan.com/*",
+    "https://*.springboard.infosys.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.onwingspan.com/*",
+        "https://*.springboard.infosys.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
