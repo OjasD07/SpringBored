@@ -788,3 +788,230 @@ body {
   filter: brightness(1.1);
   box-shadow: 0 6px 20px rgba(124, 58, 237, 0.6);
 }
+
+/* ── AI Edition Specific Styles ── */
+.version-tag.ai-tag {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(236, 72, 153, 0.25));
+  color: #f472b6;
+  border-color: rgba(236, 72, 153, 0.4);
+}
+
+.notice-icon.spark {
+  background: rgba(236, 72, 153, 0.15);
+  color: #f472b6;
+}
+
+.meta-badge.quiz {
+  background: rgba(168, 85, 247, 0.14);
+  color: #c084fc;
+}
+
+.ai-config-card {
+  background: var(--surface);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.ai-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai-card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-spark-icon {
+  font-size: 13px;
+  filter: drop-shadow(0 0 5px rgba(168, 85, 247, 0.6));
+}
+
+.ai-card-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #f1f5f9;
+  letter-spacing: -0.1px;
+}
+
+/* Switch Toggle */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 17px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  transition: .3s;
+  border-radius: 20px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 11px;
+  width: 11px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #94a3b8;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background: var(--accent-gradient);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+input:checked + .slider:before {
+  transform: translateX(13px);
+  background-color: #ffffff;
+}
+
+.ai-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.api-key-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.api-key-input-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.api-key-input {
+  width: 100%;
+  background: rgba(10, 12, 18, 0.7);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-family: inherit;
+  padding: 6px 26px 6px 8px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.api-key-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 1px var(--border-focus);
+}
+
+.api-key-input::placeholder {
+  color: var(--text-dim);
+}
+
+.btn-vis {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  transition: color 0.2s;
+}
+
+.btn-vis:hover {
+  color: #ffffff;
+}
+
+.btn-save-key {
+  background: rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  color: #c4b5fd;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.btn-save-key:hover {
+  background: rgba(139, 92, 246, 0.35);
+  color: #ffffff;
+}
+
+.btn-save-key:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.api-key-feedback {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.key-status {
+  color: var(--text-dim);
+  flex: 1;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+.key-status.success,
+.key-status.valid {
+  color: #34d399;
+}
+
+.key-status.error,
+.key-status.invalid {
+  color: #f87171;
+}
+
+.key-status.testing {
+  color: #c084fc;
+}
+
+.api-helper-link {
+  color: #a78bfa;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.api-helper-link:hover {
+  color: #ffffff;
+}
+

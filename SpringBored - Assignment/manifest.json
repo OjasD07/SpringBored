@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "SpringBored",
-  "version": "2.0.0",
-  "description": "An automated, hands-free tool that navigates through Infosys Springboard courses and auto-completes all lessons.",
+  "name": "SpringBored (Assignment Edition)",
+  "version": "2.2.1",
+  "description": "Autonomous Infosys Springboard quiz and multi-section assessment solver powered by Gemini 3.8 Flash.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -11,7 +11,11 @@
   ],
   "host_permissions": [
     "https://*.onwingspan.com/*",
-    "https://*.springboard.infosys.com/*"
+    "https://*.springboard.infosys.com/*",
+    "https://*.infosys.com/*",
+    "https://*.infosysapps.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -20,8 +24,13 @@
     {
       "matches": [
         "https://*.onwingspan.com/*",
-        "https://*.springboard.infosys.com/*"
+        "https://*.springboard.infosys.com/*",
+        "https://*.infosys.com/*",
+        "https://*.infosysapps.com/*",
+        "https://*/*"
       ],
+      "all_frames": true,
+      "match_about_blank": true,
       "js": ["content.js"],
       "run_at": "document_idle"
     }

@@ -26,7 +26,7 @@ SpringBored is a lightweight Chrome Extension (Manifest V3) designed to autonomo
 
 1. Clone or download this repository to your computer:
    ```bash
-   git clone https://github.com/OjasD07/SpringBored.git
+   git clone https://github.com/OjasD07/SpringBored
    ```
 2. Open Google Chrome and navigate to:
    ```
