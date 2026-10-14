@@ -14,6 +14,7 @@ const skipCount  = document.getElementById('skipCount');
 const doneCount  = document.getElementById('doneCount');
 const logFeed    = document.getElementById('logFeed');
 const clearLogBtn = document.getElementById('clearLog');
+const pageGuard  = document.getElementById('pageGuard');
 
 let isPaused = false;
 
@@ -154,13 +155,26 @@ chrome.runtime.onMessage.addListener((msg) => {
     tab.url?.includes('springboard.infosys.com');
 
   if (!isOnSpringboard) {
-    applyStatus('idle', 'Navigate to an Infosys Springboard course first');
+    applyStatus('idle', 'Navigate to Infosys Springboard first');
+    pageGuard.style.display = 'flex';
+    pageGuard.innerHTML = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
+      Not on Springboard. Go to <strong>infyspringboard.onwingspan.com</strong> first.`;
     btnStart.disabled = true;
     return;
   }
 
+  // Check if we're on a viewer page and get running state
   try {
     const resp = await chrome.tabs.sendMessage(tab.id, { action: 'GET_STATUS' });
+
+    if (!resp?.onViewerPage) {
+      pageGuard.style.display = 'flex';
+      btnStart.disabled = true;
+      applyStatus('idle', 'Open a course and click a lesson to get to the player page');
+      return;
+    }
+
     if (resp?.isRunning && !resp?.isPaused) {
       applyStatus('running', 'Automation in progress...');
       btnStart.disabled = true;
@@ -174,6 +188,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       btnStop.disabled  = false;
     }
   } catch (_) {
-    // Content script not yet injected on this page
+    // Content script not yet injected — page may still be loading
+    applyStatus('idle', 'Ready. Press Start on the course player page.');
   }
 })();

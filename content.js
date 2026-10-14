@@ -1,461 +1,423 @@
-// SpringBored - Content Script
-// Runs on Infosys Springboard pages and handles course automation
+// SpringBored - Content Script v2
+// Targets: infyspringboard.onwingspan.com/web/en/viewer/*
 
 (function () {
   'use strict';
 
-  // ─── State ───────────────────────────────────────────────────────────────
+  // ─── GUARD: Only run on actual course viewer pages ────────────────────────
+  // The viewer URL always contains /viewer/ — we must not touch the home page
+  const ON_VIEWER_PAGE = /\/viewer\//.test(window.location.pathname);
+
+  // ─── State ────────────────────────────────────────────────────────────────
   let isRunning = false;
-  let isPaused = false;
-  let currentLessonIndex = 0;
-  let lessons = [];
-  let videoCheckInterval = null;
-  let statusCallback = null;
+  let isPaused  = false;
 
-  // ─── Logger ──────────────────────────────────────────────────────────────
-  function log(msg) {
-    console.log(`[SpringBored] ${msg}`);
-  }
+  // ─── Utils ────────────────────────────────────────────────────────────────
+  const log = (msg) => console.log(`%c[SpringBored] ${msg}`, 'color:#7c6bff;font-weight:bold');
 
-  // ─── Utility: sleep ──────────────────────────────────────────────────────
   function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(r => setTimeout(r, ms));
   }
 
-  // ─── Utility: wait for element ───────────────────────────────────────────
-  function waitForElement(selector, timeout = 10000) {
+  /** Wait for a CSS selector to appear in the DOM, with timeout. */
+  function waitForEl(selector, root = document, timeout = 12000) {
     return new Promise((resolve, reject) => {
-      const existing = document.querySelector(selector);
-      if (existing) return resolve(existing);
-
-      const observer = new MutationObserver(() => {
-        const el = document.querySelector(selector);
-        if (el) {
-          observer.disconnect();
-          resolve(el);
-        }
+      const el = root.querySelector(selector);
+      if (el) return resolve(el);
+      const obs = new MutationObserver(() => {
+        const found = root.querySelector(selector);
+        if (found) { obs.disconnect(); resolve(found); }
       });
-
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      setTimeout(() => {
-        observer.disconnect();
-        reject(new Error(`Timeout waiting for: ${selector}`));
-      }, timeout);
+      obs.observe(root.body ?? root, { childList: true, subtree: true });
+      setTimeout(() => { obs.disconnect(); reject(new Error(`Timeout: ${selector}`)); }, timeout);
     });
   }
 
-  // ─── Open Contents Tab ────────────────────────────────────────────────────
-  async function openContentsTab() {
-    log('Looking for Contents tab...');
+  /** Dispatch status back to popup */
+  function sendStatus(data) {
+    chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', ...data }).catch(() => {});
+  }
 
-    // Try multiple selector strategies for the "Contents" tab
-    const selectors = [
-      'button[aria-label="Contents"]',
-      'button.mat-tab-label:not([aria-disabled="true"])',
-      '[data-name="contents"]',
-      // The tab bar visible in screenshot
-      '.viewer-top-icons button',
-      'lex-viewer-top-nav button',
+  // ─── STEP 1: Open the Contents / TOC sidebar tab ──────────────────────────
+  // Real DOM: the TOC is already in the DOM as div.viewer-toc-container.
+  // It may be hidden behind a tab — find the tab whose label includes "content".
+  async function openContentsTab() {
+    log('Opening Contents tab...');
+
+    // Real container confirmed from live DOM
+    const tocContainer = document.querySelector('.viewer-toc-container');
+    if (tocContainer) {
+      const style = window.getComputedStyle(tocContainer);
+      if (style.display !== 'none' && style.visibility !== 'hidden') {
+        log('TOC already visible');
+        return true;
+      }
+    }
+
+    // Try to click a tab button that reveals it
+    const allBtns = [...document.querySelectorAll('button, [role="tab"]')];
+    for (const btn of allBtns) {
+      const label = (
+        btn.getAttribute('aria-label') || btn.title || btn.textContent || ''
+      ).toLowerCase();
+      if (label.includes('content') && !label.includes('information')) {
+        log('Clicking Contents tab: ' + label);
+        btn.click();
+        await sleep(1200);
+        return true;
+      }
+    }
+
+    log('TOC tab not found — assuming already visible');
+    return true;
+  }
+
+  // ─── STEP 2: Expand all collapsed folder/module nodes ─────────────────────
+  // Real DOM: folders are mat-tree-node.ws-player-tree-node with aria-expanded="false"
+  // AND they contain a mat-icon.toc-expand-icon (leaf nodes do not have this icon).
+  async function expandAllFolders() {
+    log('Expanding all folders...');
+
+    const toc = document.querySelector('.viewer-toc-container, .toc-container');
+    if (!toc) { log('TOC container not found, skipping expand'); return; }
+
+    // Expand in multiple passes (folders may reveal sub-folders after opening)
+    for (let pass = 0; pass < 4; pass++) {
+      const collapsedFolders = [...toc.querySelectorAll(
+        'mat-tree-node.ws-player-tree-node[aria-expanded="false"]'
+      )].filter(node => !!node.querySelector('mat-icon.toc-expand-icon'));
+
+      if (collapsedFolders.length === 0) break;
+      log(`Pass ${pass + 1}: expanding ${collapsedFolders.length} folder(s)`);
+
+      for (const folder of collapsedFolders) {
+        folder.click();
+        await sleep(350);
+      }
+      await sleep(500);
+    }
+
+    log('Folders expanded');
+  }
+
+  // ─── STEP 3: Collect all leaf lesson items ────────────────────────────────
+  // Real DOM: all nodes are mat-tree-node.ws-player-tree-node
+  // FOLDERS have a mat-icon.toc-expand-icon child → skip them
+  // LEAVES do NOT have that icon → these are clickable lessons
+  function collectLessons() {
+    const toc = document.querySelector('.viewer-toc-container, .toc-container');
+    if (!toc) {
+      log('TOC container not found');
+      return [];
+    }
+
+    // Get all tree nodes and keep only leaf (non-folder) ones
+    const allNodes = [...toc.querySelectorAll('mat-tree-node.ws-player-tree-node')];
+    if (allNodes.length > 0) {
+      const leaves = allNodes.filter(node => !node.querySelector('mat-icon.toc-expand-icon'));
+      log(`Found ${allNodes.length} tree nodes, ${leaves.length} are leaf lessons`);
+      return leaves;
+    }
+
+    // Fallback for other Wingspan deployments
+    const fallbackSelectors = [
+      'lex-toc-item',
+      '.toc-item:not(.toc-collection)',
+      '.toc-item-container',
+    ];
+    for (const sel of fallbackSelectors) {
+      const items = [...toc.querySelectorAll(sel)];
+      if (items.length > 0) {
+        log(`Fallback: ${items.length} items via "${sel}"`);
+        return items;
+      }
+    }
+
+    log('No lesson items found in TOC');
+    return [];
+  }
+
+  // ─── Helpers: assignment & completion detection ────────────────────────────
+  function isAssignment(el) {
+    const text = (el.textContent || '').toLowerCase();
+    const id   = (el.id || '').toLowerCase();
+    // ws-viewer-icon is the content-type icon; check its content too
+    const iconEl = el.querySelector('ws-viewer-icon, [class*="content-type"]');
+    const iconText = (iconEl?.textContent || iconEl?.getAttribute('type') || '').toLowerCase();
+    return (
+      text.includes('assignment') ||
+      text.includes('quiz') ||
+      text.includes('assessment') ||
+      iconText.includes('assessment') ||
+      iconText.includes('quiz')
+    );
+  }
+
+  function isCompleted(el) {
+    // Real DOM: completed nodes get an 'is-completed' or 'completed' class,
+    // OR their ws-viewer-icon shows a checkmark/tick state.
+    const cls = (el.className?.toString() || '').toLowerCase();
+    const hasCheckIcon = !!el.querySelector(
+      'mat-icon.tick, mat-icon.done, [class*="tick"], [class*="complete"], ws-viewer-icon[status="completed"]'
+    );
+    // Also check aria-selected or a data attribute marking completion
+    return (
+      hasCheckIcon ||
+      cls.includes('completed') ||
+      cls.includes('is-complete') ||
+      el.getAttribute('aria-checked') === 'true' ||
+      el.getAttribute('data-status') === 'completed'
+    );
+  }
+
+  // ─── STEP 4: Handle video content ─────────────────────────────────────────
+  // Seek to end, wait for "ended", then resolve.
+  function handleVideoContent() {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const done = (reason) => {
+        if (!resolved) { resolved = true; resolve(reason); }
+      };
+
+      let elapsed = 0;
+      const pollMs = 500;
+      const maxWaitMs = 45000; // 45s max to find & finish video
+
+      const poll = setInterval(async () => {
+        if (!isRunning || isPaused) { clearInterval(poll); return done('paused'); }
+
+        elapsed += pollMs;
+        const video = document.querySelector('video');
+
+        if (video && video.readyState >= 2 && video.duration > 0 && !isNaN(video.duration)) {
+          clearInterval(poll);
+          const dur = video.duration;
+          log(`Video ready. Duration=${dur.toFixed(1)}s`);
+
+          // Speed up & mute
+          video.muted = true;
+          try { video.playbackRate = 16; } catch (_) {}
+
+          // Ensure it's playing
+          if (video.paused) {
+            try { await video.play(); } catch (_) {}
+          }
+
+        // Seek to 3s before end
+          const seekTo = Math.max(0, dur - 3);
+          await sleep(400);
+
+          // Video.js wraps the native <video> — setting currentTime directly works,
+          // but we should also try the vjs player API if available
+          video.currentTime = seekTo;
+          // Also try via Video.js global player instance if present
+          try {
+            if (window.videojs) {
+              const vjsPlayer = window.videojs.getPlayers && Object.values(window.videojs.getPlayers())[0];
+              if (vjsPlayer) vjsPlayer.currentTime(seekTo);
+            }
+          } catch (_) {}
+          log(`Seeked to ${seekTo.toFixed(1)}s`);
+
+          // Listen for end
+          const onEnded = async () => {
+            video.removeEventListener('ended', onEnded);
+            log('Video ended. Waiting 2s...');
+            await sleep(2000);
+            done('video_done');
+          };
+          video.addEventListener('ended', onEnded);
+
+          // Safety: if still not resolved 12s after seek, force advance
+          setTimeout(async () => {
+            video.removeEventListener('ended', onEnded);
+            if (!resolved) {
+              log('Safety timeout — advancing anyway');
+              await sleep(1500);
+              done('video_timeout');
+            }
+          }, 12000);
+
+        } else if (elapsed >= maxWaitMs) {
+          clearInterval(poll);
+          log('No video found — treating as non-video slide content');
+          await sleep(2500);
+          done('no_video');
+        }
+      }, pollMs);
+    });
+  }
+
+  // ─── STEP 5: Click the Next / → button in the viewer ─────────────────────
+  // Real DOM (from live inspection):
+  //   aria-label="next content"
+  //   class="... navigation-btn-frwd navigation-btn ..."
+  //   mat-icon text = "arrow_forward_ios"
+  async function clickNextButton() {
+    // Strategy 1: exact aria-label from real DOM
+    const exact = [
+      'button[aria-label="next content"]',      // confirmed from live DOM
+      'button.navigation-btn-frwd',             // confirmed class from live DOM
+      'button[aria-label="Next Content"]',      // capitalisation variant
+      'button[aria-label="next"]',
+      'button[aria-label="Next"]',
     ];
 
-    for (const sel of selectors) {
-      const els = document.querySelectorAll(sel);
-      for (const el of els) {
-        if (el.textContent.toLowerCase().includes('content')) {
-          el.click();
-          log('Clicked Contents tab via: ' + sel);
-          await sleep(1500);
+    for (const sel of exact) {
+      const btn = document.querySelector(sel);
+      if (btn && !btn.disabled && !btn.hasAttribute('disabled')) {
+        log(`Clicking Next via "${sel}"`);
+        btn.click();
+        await sleep(3000);
+        return true;
+      }
+    }
+
+    // Strategy 2: mat-icon text = arrow_forward_ios (real icon from live DOM)
+    const allBtns = [...document.querySelectorAll('button')];
+    for (const btn of allBtns) {
+      if (btn.disabled || btn.hasAttribute('disabled')) continue;
+      const icon = btn.querySelector('mat-icon');
+      if (!icon) continue;
+      const iconText = icon.textContent.trim();
+      if (iconText === 'arrow_forward_ios' || iconText === 'chevron_right' || iconText === 'navigate_next' || iconText === 'arrow_forward') {
+        const rect = btn.getBoundingClientRect();
+        // Must be on the right half of the screen (not sidebar arrows)
+        if (rect.left > window.innerWidth * 0.35 && rect.width < 80) {
+          log(`Clicking Next via icon "${iconText}" at x=${rect.left}`);
+          btn.click();
+          await sleep(3000);
           return true;
         }
       }
     }
 
-    // Fallback: look for SVG icon buttons in the top-right nav area
-    const buttons = document.querySelectorAll(
-      'lex-viewer-top-nav button, .viewer-nav button, .mat-icon-button'
-    );
-    log(`Found ${buttons.length} nav buttons, inspecting...`);
-    for (const btn of buttons) {
-      if (
-        btn.title?.toLowerCase().includes('content') ||
-        btn.getAttribute('aria-label')?.toLowerCase().includes('content')
-      ) {
-        btn.click();
-        await sleep(1500);
-        return true;
-      }
-    }
-
-    log('Contents tab not found – may already be open');
+    log('Next button not found — lesson may have auto-advanced');
     return false;
   }
 
-  // ─── Collect all lesson items from the sidebar ────────────────────────────
-  function collectLessons() {
-    // Selectors seen on Wingspan/Springboard sidebars
-    const itemSelectors = [
-      // Module content items (not folder/section headers)
-      'lex-toc-item:not(.is-collection)',
-      '.lex-toc-item:not([data-type="collection"])',
-      '.toc-item-container',
-      'ul.toc-list li:not(.toc-section)',
-      // Fallback generic
-      '.content-item',
-    ];
-
-    for (const sel of itemSelectors) {
-      const els = [...document.querySelectorAll(sel)];
-      if (els.length > 0) {
-        log(`Collected ${els.length} lessons via "${sel}"`);
-        return els;
-      }
-    }
-
-    // Deep fallback: scan all sidebar links
-    const sidebar = document.querySelector(
-      'lex-table-of-contents, .toc-container, .contents-panel, mat-sidenav'
-    );
-    if (sidebar) {
-      const links = [...sidebar.querySelectorAll('a, button, [role="treeitem"]')];
-      log(`Fallback: found ${links.length} sidebar items`);
-      return links;
-    }
-
-    log('No lessons found in sidebar');
-    return [];
-  }
-
-  // ─── Expand all collapsed folders/modules ────────────────────────────────
-  async function expandAllFolders() {
-    log('Expanding all folders...');
-    const folderSelectors = [
-      '.toc-collection-title',
-      'lex-toc-collection > button',
-      '.toc-folder',
-      '[class*="collection"] button',
-      'button.module-title',
-    ];
-
-    for (const sel of folderSelectors) {
-      const folders = [...document.querySelectorAll(sel)];
-      for (const folder of folders) {
-        const expanded =
-          folder.getAttribute('aria-expanded') === 'true' ||
-          folder.parentElement?.classList.contains('expanded');
-        if (!expanded) {
-          folder.click();
-          await sleep(400);
-        }
-      }
-    }
-    await sleep(800);
-  }
-
-  // ─── Check if an item is an assignment ───────────────────────────────────
-  function isAssignment(el) {
-    const text = el.textContent.toLowerCase();
-    const type = el.getAttribute('data-type') || el.getAttribute('data-resource-type') || '';
-    return (
-      text.includes('assignment') ||
-      text.includes('quiz') ||
-      text.includes('assessment') ||
-      type.includes('assessment') ||
-      type.includes('quiz') ||
-      el.querySelector('[class*="assessment"], [class*="quiz"]') !== null
-    );
-  }
-
-  // ─── Check if item already has a completion tick ──────────────────────────
-  function isCompleted(el) {
-    return (
-      el.classList.contains('completed') ||
-      el.querySelector('.completed, .tick, [class*="checkmark"], [class*="complete"]') !== null ||
-      el.getAttribute('aria-checked') === 'true' ||
-      el.querySelector('mat-icon[fonticon="done"], .mat-icon[data-mat-icon-name="done"]') !== null
-    );
-  }
-
-  // ─── Get the current HTML5 video element ─────────────────────────────────
-  function getVideo() {
-    return (
-      document.querySelector('video') ||
-      document.querySelector('lex-player video') ||
-      document.querySelector('vg-player video')
-    );
-  }
-
-  // ─── Handle video lesson: seek near end → wait → move on ─────────────────
-  function waitForVideoAndAdvance() {
-    return new Promise((resolve) => {
-      let attempts = 0;
-      const maxAttempts = 60; // 30 seconds max wait
-
-      const poll = setInterval(async () => {
-        if (!isRunning || isPaused) {
-          clearInterval(poll);
-          return resolve('paused');
-        }
-
-        attempts++;
-        const video = getVideo();
-
-        if (video && video.readyState >= 2 && video.duration > 0) {
-          clearInterval(poll);
-
-          const duration = video.duration;
-          log(`Video found. Duration: ${duration.toFixed(1)}s`);
-
-          // Set playback rate to 16x for speed
-          video.playbackRate = 16;
-          video.muted = true;
-
-          // If video hasn't started, play it
-          if (video.paused) {
-            try { await video.play(); } catch (_) { /* autoplay blocked, handled below */ }
-          }
-
-          // Seek to (duration - 3) so we're 3 seconds from end
-          const targetTime = Math.max(0, duration - 3);
-          log(`Seeking to ${targetTime.toFixed(1)}s (3s before end)`);
-
-          // Small delay to ensure video state is ready before seeking
-          await sleep(500);
-          video.currentTime = targetTime;
-
-          // Wait for "ended" event or near-end detection
-          const endHandler = async () => {
-            video.removeEventListener('ended', endHandler);
-            log('Video ended. Waiting 2s before advancing...');
-            await sleep(2000);
-            resolve('video_done');
-          };
-
-          video.addEventListener('ended', endHandler);
-
-          // Safety net: if video doesn't fire 'ended' within 10s after seek, advance anyway
-          setTimeout(async () => {
-            video.removeEventListener('ended', endHandler);
-            if (video.currentTime >= duration - 1 || video.ended) {
-              log('Safety net: video near/at end. Advancing...');
-              await sleep(2000);
-              resolve('video_done');
-            }
-          }, 10000);
-
-        } else if (attempts >= maxAttempts) {
-          clearInterval(poll);
-          log('No video found after 30s, treating as non-video content...');
-          await sleep(3000); // Wait a bit for non-video slides/articles
-          resolve('no_video');
-        }
-      }, 500);
-    });
-  }
-
-  // ─── Click the "Next" button in the viewer ───────────────────────────────
-  async function clickNext() {
-    const nextSelectors = [
-      'button[aria-label="Next"]',
-      'button[title="Next"]',
-      '.next-btn',
-      'lex-player-actions button:last-child',
-      '.player-next-button',
-      'button.go-next',
-      '[class*="next-button"]',
-      'button > .mat-icon[data-mat-icon-name="chevron_right"]',
-    ];
-
-    for (const sel of nextSelectors) {
-      const btn = document.querySelector(sel);
-      if (btn && !btn.disabled) {
-        log('Clicking Next via: ' + sel);
-        btn.click();
-        await sleep(2500);
-        return true;
-      }
-    }
-
-    // Fallback: right arrow icon buttons at the edge of the viewer
-    const chevrons = [...document.querySelectorAll('button')].filter(b => {
-      const icon = b.querySelector('mat-icon, i');
-      if (icon) {
-        return (
-          icon.textContent.trim() === 'chevron_right' ||
-          icon.textContent.trim() === 'navigate_next' ||
-          icon.className.includes('right') ||
-          icon.className.includes('next')
-        );
-      }
-      return b.textContent.trim() === '›' || b.textContent.trim() === '→';
-    });
-
-    if (chevrons.length > 0) {
-      chevrons[chevrons.length - 1].click();
-      log('Clicked next via chevron button');
-      await sleep(2500);
-      return true;
-    }
-
-    log('Next button not found');
-    return false;
-  }
-
-  // ─── Send status update to popup ─────────────────────────────────────────
-  function sendStatus(data) {
-    chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', ...data }).catch(() => {});
-  }
-
-  // ─── Main automation loop ────────────────────────────────────────────────
+  // ─── Main automation loop ─────────────────────────────────────────────────
   async function runAutomation() {
-    log('Starting SpringBored automation...');
-    isRunning = true;
-    isPaused = false;
-
-    sendStatus({ status: 'running', message: 'Opening Contents tab...' });
-
-    // Step 1: Open the Contents tab
-    await openContentsTab();
-    await sleep(1000);
-
-    // Step 2: Expand all folders/modules
-    await expandAllFolders();
-
-    // Step 3: Collect all lessons
-    lessons = collectLessons();
-    log(`Found ${lessons.length} total items in sidebar`);
-
-    if (lessons.length === 0) {
-      sendStatus({ status: 'error', message: 'No lessons found. Make sure you are on a course page.' });
+    if (!ON_VIEWER_PAGE) {
+      sendStatus({
+        status: 'error',
+        message: 'Please navigate to a course player page first (the URL should contain /viewer/).',
+      });
       isRunning = false;
       return;
     }
 
-    // Step 4: Iterate through each lesson
+    log('▶ Automation started');
+    isRunning = true;
+    isPaused  = false;
+
+    sendStatus({ status: 'running', message: 'Opening Contents tab...' });
+
+    // 1. Open Contents tab
+    await openContentsTab();
+    await sleep(1000);
+
+    // 2. Expand all folders
+    await expandAllFolders();
+
+    // 3. Collect lessons
+    const lessons = collectLessons();
+    log(`${lessons.length} lesson items found`);
+
+    if (lessons.length === 0) {
+      sendStatus({
+        status: 'error',
+        message: 'No lessons found in the sidebar. Open the Contents tab manually then try again.',
+      });
+      isRunning = false;
+      return;
+    }
+
     let completed = 0;
-    let skipped = 0;
+    let skipped   = 0;
+    const total   = lessons.length;
 
     for (let i = 0; i < lessons.length; i++) {
       if (!isRunning) break;
-
-      while (isPaused) {
-        await sleep(500);
-      }
+      while (isPaused) { await sleep(400); }
 
       const lesson = lessons[i];
-      const title = lesson.textContent.trim().slice(0, 60);
+      const title  = lesson.textContent.trim().replace(/\s+/g, ' ').slice(0, 60);
 
       // Skip assignments
       if (isAssignment(lesson)) {
-        log(`Skipping assignment: "${title}"`);
+        log(`⏭ Skipping assignment: "${title}"`);
         skipped++;
-        sendStatus({
-          status: 'running',
-          message: `Skipping assignment: ${title}`,
-          completed,
-          total: lessons.length,
-          skipped,
-        });
+        sendStatus({ status: 'running', message: `Skipping: ${title}`, completed, total, skipped });
         continue;
       }
 
-      // Skip already-completed lessons
+      // Skip already-completed
       if (isCompleted(lesson)) {
-        log(`Already completed: "${title}"`);
+        log(`✓ Already done: "${title}"`);
         completed++;
-        sendStatus({
-          status: 'running',
-          message: `Already done: ${title}`,
-          completed,
-          total: lessons.length,
-          skipped,
-        });
+        sendStatus({ status: 'running', message: `Already done: ${title}`, completed, total, skipped });
         continue;
       }
 
-      log(`Opening lesson [${i + 1}/${lessons.length}]: "${title}"`);
-      sendStatus({
-        status: 'running',
-        message: `Lesson ${i + 1}/${lessons.length}: ${title}`,
-        completed,
-        total: lessons.length,
-        skipped,
-      });
+      log(`▶ [${i + 1}/${total}] "${title}"`);
+      sendStatus({ status: 'running', message: `[${i + 1}/${total}] ${title}`, completed, total, skipped });
 
       // Click the lesson in the sidebar
       lesson.click();
-      await sleep(2500); // Wait for content to load
+      await sleep(2800); // allow SPA to load content
 
-      // Handle the content
-      const result = await waitForVideoAndAdvance();
-      log(`Lesson result: ${result}`);
+      // Handle video / non-video
+      await handleVideoContent();
 
-      // Click "Next" to mark as complete and move on
-      await clickNext();
+      // Click Next to confirm completion
+      await clickNextButton();
 
       completed++;
-      sendStatus({
-        status: 'running',
-        message: `Completed: ${title}`,
-        completed,
-        total: lessons.length,
-        skipped,
-      });
+      sendStatus({ status: 'running', message: `✓ Done: ${title}`, completed, total, skipped });
 
-      // Brief pause between lessons
-      await sleep(1500);
+      // Short breathe between lessons
+      await sleep(1200);
     }
 
-    // Done
-    log('All lessons processed!');
-    sendStatus({
-      status: 'done',
-      message: `Done! Completed ${completed} lessons, skipped ${skipped} assignments.`,
-      completed,
-      total: lessons.length,
-      skipped,
-    });
+    // ── Finished ──
     isRunning = false;
+    const msg = `🎉 All done! Completed ${completed}, skipped ${skipped} assignment(s).`;
+    log(msg);
+    sendStatus({ status: 'done', message: msg, completed, total, skipped });
   }
 
-  // ─── Message listener from popup/background ───────────────────────────────
+  // ─── Message listener ─────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.action) {
       case 'START':
-        if (!isRunning) {
-          runAutomation();
-        }
-        sendResponse({ ok: true });
+        if (!isRunning) runAutomation();
+        sendResponse({ ok: true, onViewerPage: ON_VIEWER_PAGE });
         break;
-
       case 'PAUSE':
         isPaused = true;
-        sendStatus({ status: 'paused', message: 'Paused by user.' });
+        sendStatus({ status: 'paused', message: 'Paused.' });
         sendResponse({ ok: true });
         break;
-
       case 'RESUME':
         isPaused = false;
         sendStatus({ status: 'running', message: 'Resumed.' });
         sendResponse({ ok: true });
         break;
-
       case 'STOP':
         isRunning = false;
-        isPaused = false;
-        sendStatus({ status: 'stopped', message: 'Stopped by user.' });
+        isPaused  = false;
+        sendStatus({ status: 'stopped', message: 'Stopped.' });
         sendResponse({ ok: true });
         break;
-
       case 'GET_STATUS':
-        sendResponse({ isRunning, isPaused });
+        sendResponse({ isRunning, isPaused, onViewerPage: ON_VIEWER_PAGE });
         break;
-
       default:
         break;
     }
-    return true; // Keep channel open for async
+    return true;
   });
 
-  log('Content script loaded and ready.');
+  log(`Content script ready (viewer page: ${ON_VIEWER_PAGE})`);
 })();

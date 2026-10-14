@@ -14,9 +14,7 @@
     <header class="header">
       <div class="logo-wrap">
         <div class="logo-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor"/>
-          </svg>
+          <img src="../Assets/Logo.png" alt="SpringBored" width="38" height="38" style="border-radius:10px;display:block;" />
         </div>
         <div>
           <h1 class="title">SpringBored</h1>
@@ -25,6 +23,12 @@
       </div>
       <div class="status-dot" id="statusDot"></div>
     </header>
+
+    <!-- Wrong-page banner (hidden by default) -->
+    <div class="page-guard" id="pageGuard" style="display:none;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
+      Navigate to a <strong>course player page</strong> first — the URL must contain <code>/viewer/</code>
+    </div>
 
     <!-- Status Card -->
     <div class="status-card" id="statusCard">
