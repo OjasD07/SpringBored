@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src https://generativelanguage.googleapis.com;" />
   <title>SpringBored (Assignment Edition)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -51,8 +52,8 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
           </div>
           <div class="notice-text">
-            <strong>Gemini 3.8 Flash Solver</strong>
-            <p>Assessment questions, code snippets, and choices are analyzed by Google Gemini to identify the correct answers automatically.</p>
+            <strong id="noticeAiEngineTitle">Dynamic AI Assessment Solver</strong>
+            <p id="noticeAiEngineDesc">Assessment questions, code snippets, and choices are analyzed client-side via your chosen Google Gemini model using structured reasoning.</p>
           </div>
         </div>
       </div>
@@ -126,7 +127,7 @@
         </span>
         <span class="meta-badge quiz" id="quizBadge">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-          <span>Gemini 2.0 Flash</span>
+          <span id="quizBadgeModelText">Gemini AI</span>
         </span>
       </div>
     </div>
@@ -167,6 +168,19 @@
           <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="api-helper-link">
             Get free key ↗
           </a>
+        </div>
+
+        <div class="model-select-wrap" style="margin-top: 10px; display: flex; flex-direction: column; gap: 4px;">
+          <label for="modelSelect" style="font-size: 11px; color: #94a3b8; font-weight: 600;">Active AI Model:</label>
+          <select id="modelSelect" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(139, 92, 246, 0.35); color: #f8fafc; font-size: 11.5px; padding: 6px 8px; border-radius: 6px; outline: none; cursor: pointer;">
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash (Autonomous Agents)</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash (High-Throughput)</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Reasoning)</option>
+            <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Recommended)</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast)</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Standard Pro)</option>
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash (Standard Fast)</option>
+          </select>
         </div>
       </div>
     </div>
@@ -213,7 +227,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-      <span class="footer-note">⚡ Gemini 2.0 Flash • Local Execution</span>
+      <span class="footer-note">⚡ Google Gemini AI • Direct API</span>
       <button class="btn-text" id="btnOpenNotice">Privacy Notice</button>
     </footer>
   </div>

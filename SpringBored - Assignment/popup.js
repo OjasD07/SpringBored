@@ -1,5 +1,5 @@
 // SpringBored (Assignment Edition) - Popup Script
-// Controls Gemini 3.8 Flash Assessment Solver
+// Controls Gemini AI Assessment Solver
 
 const btnStart          = document.getElementById('btnStart');
 const btnPause          = document.getElementById('btnPause');
@@ -84,7 +84,27 @@ btnOpenNotice.addEventListener('click', () => {
   showNotice(true);
 });
 
+// ── Dynamic Model Name Formatter ──────────────────────────────────────────────
+function formatModelName(modelCode) {
+  if (!modelCode) return 'Gemini AI';
+  const clean = String(modelCode).replace(/^models\//, '').trim();
+  if (clean === 'gemini-3.8-flash') return 'Gemini 3.8 Flash';
+  if (clean === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
+  if (clean === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
+  if (clean === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
+  if (clean === 'gemini-2.0-flash') return 'Gemini 2.0 Flash';
+  if (clean === 'gemini-1.5-pro') return 'Gemini 1.5 Pro';
+  if (clean === 'gemini-1.5-flash') return 'Gemini 1.5 Flash';
+  return clean
+    .split('-')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 // ── Initialize AI Quiz Settings ──────────────────────────────────────────────
+const modelSelect         = document.getElementById('modelSelect');
+const quizBadgeModelText  = document.getElementById('quizBadgeModelText');
+
 chrome.storage.local.get(['aiQuizEnabled', 'geminiApiKey', 'geminiModel'], (data) => {
   const isEnabled = data.aiQuizEnabled !== false; // Default true
   if (aiQuizToggle) {
@@ -92,15 +112,32 @@ chrome.storage.local.get(['aiQuizEnabled', 'geminiApiKey', 'geminiModel'], (data
     updateAiCardState(isEnabled);
   }
 
+  const validModels = [
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash'
+  ];
+  let modelName = data.geminiModel;
+  if (!modelName || !validModels.includes(modelName)) {
+    modelName = 'gemini-2.5-flash';
+    chrome.storage.local.set({ geminiModel: modelName });
+  }
+
+  if (modelSelect) {
+    modelSelect.value = modelName;
+  }
+  if (quizBadgeModelText) {
+    quizBadgeModelText.textContent = formatModelName(modelName);
+  }
+
   if (data.geminiApiKey) {
     if (geminiApiKeyInput) geminiApiKeyInput.value = data.geminiApiKey;
-    let modelName = data.geminiModel || 'gemini-2.0-flash';
-    if (modelName.toLowerCase().startsWith('gemma')) {
-      modelName = 'gemini-2.0-flash';
-      chrome.storage.local.set({ geminiModel: modelName });
-    }
     if (keyStatusText) {
-      keyStatusText.textContent = `✓ Active (${modelName})`;
+      keyStatusText.textContent = `✓ Active (${formatModelName(modelName)})`;
       keyStatusText.className = 'key-status success';
     }
   } else {
@@ -110,6 +147,22 @@ chrome.storage.local.get(['aiQuizEnabled', 'geminiApiKey', 'geminiModel'], (data
     }
   }
 });
+
+if (modelSelect) {
+  modelSelect.addEventListener('change', () => {
+    const selected = modelSelect.value;
+    const formatted = formatModelName(selected);
+    chrome.storage.local.set({ geminiModel: selected }, () => {
+      if (keyStatusText && geminiApiKeyInput?.value) {
+        keyStatusText.textContent = `✓ Active (${formatted})`;
+      }
+      if (quizBadgeModelText) {
+        quizBadgeModelText.textContent = formatted;
+      }
+      addLog(`✨ Model set to ${formatted}`, 'done');
+    });
+  });
+}
 
 function updateAiCardState(enabled) {
   if (!aiCardBody) return;
@@ -144,25 +197,44 @@ if (btnSaveKey && geminiApiKeyInput) {
       return;
     }
 
+    // SECURITY: Validate key format before sending to background
+    if (!/^AIza[A-Za-z0-9_-]{31,45}$/.test(rawKey)) {
+      keyStatusText.textContent = '✕ Invalid format. Gemini keys start with "AIza" (~39 chars).';
+      keyStatusText.className = 'key-status error';
+      addLog('✕ Invalid API key format', 'error');
+      return;
+    }
+
+    const targetModel = modelSelect ? modelSelect.value : 'gemini-2.5-flash';
+    const targetLabel = formatModelName(targetModel);
+
     btnSaveKey.disabled = true;
     btnSaveKey.textContent = 'Testing...';
-    keyStatusText.textContent = 'Testing key with Google Gemini API...';
+    keyStatusText.textContent = `Testing key with ${targetLabel}...`;
     keyStatusText.className = 'key-status';
 
     try {
       const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'TEST_GEMINI_KEY', apiKey: rawKey }, resolve);
+        chrome.runtime.sendMessage({
+          type: 'TEST_GEMINI_KEY',
+          apiKey: rawKey,
+          model: targetModel
+        }, resolve);
       });
 
       if (response && response.success) {
+        const validatedModel = response.model || targetModel;
+        const formatted = formatModelName(validatedModel);
         chrome.storage.local.set({
           geminiApiKey: rawKey,
-          geminiModel: response.model || 'gemini-2.0-flash',
-          geminiApiVersion: response.version || 'v1beta'
+          geminiModel: validatedModel,
+          geminiApiVersion: 'v1beta'
         }, () => {
-          keyStatusText.textContent = `✓ Active (${response.model || 'gemini-2.0-flash'})`;
+          if (modelSelect) modelSelect.value = validatedModel;
+          if (quizBadgeModelText) quizBadgeModelText.textContent = formatted;
+          keyStatusText.textContent = `✓ Active (${formatted})`;
           keyStatusText.className = 'key-status success';
-          addLog(`✓ Gemini connected successfully (${response.model || 'gemini-2.0-flash'})`, 'done');
+          addLog(`✓ Gemini connected successfully (${formatted})`, 'done');
         });
       } else {
         const errorMsg = response?.error || 'Validation failed. Check your key.';
@@ -236,16 +308,12 @@ function addLog(text, type = 'running') {
   }
 }
 
-// ── Send action to content script and frames ─────────────────────────────────
+// ── Send action to content script ───────────────────────────────────────────
 async function triggerSolverAction(action) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
 
-  // Direct tab message
   chrome.tabs.sendMessage(tab.id, { action }).catch(() => {});
-
-  // Broadcast to all frames via background
-  chrome.runtime.sendMessage({ type: 'BROADCAST_START' }).catch(() => {});
 }
 
 // ── Button handlers ───────────────────────────────────────────────────────────
@@ -257,7 +325,8 @@ if (btnStart) {
     }
     isPaused = false;
     applyStatus('running', 'Launching Assessment Solver...');
-    addLog('▶ Launching Gemini 3.8 Flash Solver...', 'running');
+    const activeName = formatModelName(modelSelect?.value || 'gemini-2.5-flash');
+    addLog(`▶ Launching AI Solver (${activeName})...`, 'running');
     await triggerSolverAction('START');
   });
 }

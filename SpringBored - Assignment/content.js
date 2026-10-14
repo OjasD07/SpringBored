@@ -1,6 +1,6 @@
-// SpringBored (Assignment Edition) - Content Script v2.2.1
+// SpringBored (Assignment Edition) - Content Script v2.3.0
 // Autonomous Quiz, Test, and Multi-Section Assessment (IAP) Solver
-// Powered by Google Gemini 3.8 Flash.
+// Powered by Google Gemini AI.
 
 (function () {
   'use strict';
@@ -82,6 +82,24 @@
   let isEnlarged = false;
   let autoScrollLogs = true;
   const aiCommunicationLogs = [];
+  let lastApiCallTime = 0;
+  const MIN_API_INTERVAL_MS = 500;
+
+  function formatModelName(modelCode) {
+    if (!modelCode) return 'Gemini AI';
+    const clean = String(modelCode).replace(/^models\//, '').trim();
+    if (clean === 'gemini-3.8-flash') return 'Gemini 3.8 Flash';
+    if (clean === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
+    if (clean === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
+    if (clean === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
+    if (clean === 'gemini-2.0-flash') return 'Gemini 2.0 Flash';
+    if (clean === 'gemini-1.5-pro') return 'Gemini 1.5 Pro';
+    if (clean === 'gemini-1.5-flash') return 'Gemini 1.5 Flash';
+    return clean
+      .split('-')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -119,7 +137,7 @@
         </div>
         <div class="sb-hud-card-perf">
           <span class="sb-hud-card-latency">⚡ ${entry.latencyMs || 0}ms</span>
-          <span class="sb-hud-card-model">${entry.model || 'gemini-2.0-flash'}</span>
+          <span class="sb-hud-card-model">${formatModelName(entry.model || 'gemini-3.8-flash')}</span>
         </div>
       </div>
 
@@ -199,7 +217,7 @@
             <div class="sb-hud-brand">
               <span class="sb-hud-sparkle">⚡</span>
               <span class="sb-hud-title">SpringBored AI</span>
-              <span class="sb-hud-model" id="sbHudModel">Gemini 2.0 Flash</span>
+              <span class="sb-hud-model" id="sbHudModel">Gemini AI</span>
             </div>
             <div class="sb-hud-header-tools">
               <button class="sb-hud-tool-btn" id="sbHudPosBtn" title="Switch Corner (Bottom-Right / Bottom-Left / Top-Left)">⇋</button>
@@ -899,10 +917,7 @@
 
     chrome.storage.local.get(['geminiModel'], (d) => {
       if (modelEl && d.geminiModel) {
-        let m = d.geminiModel;
-        if (m.toLowerCase().startsWith('gemini-2.0-flash')) m = 'Gemini 2.0 Flash';
-        else if (m.toLowerCase().startsWith('gemini-1.5-flash')) m = 'Gemini 1.5 Flash';
-        modelEl.textContent = m;
+        modelEl.textContent = formatModelName(d.geminiModel);
       }
     });
 
@@ -930,8 +945,12 @@
       const candidates = [...root.querySelectorAll('button, [role="button"], input[type="button"], a, div, span')];
       for (const btn of candidates) {
         if (btn.disabled || btn.hasAttribute('disabled')) continue;
-        const text = (btn.innerText || btn.textContent || btn.value || '').trim();
-        if (/^start$/i.test(text) || /^start\s*(test|assessment|quiz)?$/i.test(text)) {
+        const text = (btn.innerText || btn.textContent || btn.value || '').trim().replace(/\s+/g, ' ');
+        if (
+          /^(?:start|retake|re-attempt)$/i.test(text) ||
+          /^(?:start|retake|re-attempt)\s*(?:test|assessment|quiz)$/i.test(text) ||
+          /^(?:take\s*assessment)$/i.test(text)
+        ) {
           const clickTarget = btn.closest('button, [role="button"], a') || btn;
           if (!results.includes(clickTarget)) results.push(clickTarget);
         }
@@ -943,23 +962,42 @@
   function findAttemptSectionButtons(roots = getActiveDocuments()) {
     const results = [];
     for (const root of roots) {
-      // Find ANY button, link, div, span with "Attempt Section" / "Resume Section"
+      // 1. Find ANY button, link, div, span with "Attempt Section" / "Resume Section"
       const candidates = [...root.querySelectorAll('button, a, input[type="button"], [role="button"], div, span')];
       for (const el of candidates) {
         if (el.disabled || el.hasAttribute('disabled')) continue;
-        const txt = (el.innerText || el.textContent || el.value || '').trim();
+        const rawTxt = (el.innerText || el.textContent || el.value || '').trim();
+        const txt = rawTxt.replace(/\s+/g, ' ');
+        const aria = (el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
+
         if (
-          /^attempt\s*section$/i.test(txt) ||
-          /^resume\s*section$/i.test(txt) ||
-          /^start\s*section$/i.test(txt) ||
-          (/attempt\s*section/i.test(txt) && txt.length < 35)
+          /^(?:attempt|resume|start)\s*section$/i.test(txt) ||
+          /^(?:attempt|resume|start)\s*section$/i.test(aria) ||
+          (/(?:attempt|resume)\s*section/i.test(txt) && txt.length < 40)
         ) {
-          // Select closest interactive button or element itself
           const target = el.closest('button, [role="button"], a') || el;
           if (!results.includes(target)) {
             const rect = target.getBoundingClientRect();
             if (rect.width > 0 && rect.height > 0) {
               results.push(target);
+            }
+          }
+        }
+      }
+
+      // 2. Fallback: Search inside section card containers
+      const sectionCards = [...root.querySelectorAll('.section-card, .section, mat-card, tr, [class*="section"]')];
+      for (const card of sectionCards) {
+        const btns = [...card.querySelectorAll('button, [role="button"], a')];
+        for (const b of btns) {
+          if (b.disabled || b.hasAttribute('disabled')) continue;
+          const bTxt = (b.innerText || b.textContent || '').trim().replace(/\s+/g, ' ');
+          if (/^(?:attempt|resume|start)$/i.test(bTxt) || /(?:attempt|resume)\s*section/i.test(bTxt)) {
+            if (!results.includes(b)) {
+              const rect = b.getBoundingClientRect();
+              if (rect.width > 0 && rect.height > 0) {
+                results.push(b);
+              }
             }
           }
         }
@@ -1066,6 +1104,105 @@
     }
   }
 
+  function isCircleAnswered(circleEl) {
+    if (!circleEl) return false;
+    const cls = (circleEl.className?.toString() || '').toLowerCase();
+    if (
+      cls.includes('answered') ||
+      cls.includes('completed') ||
+      cls.includes('attempted') ||
+      cls.includes('saved') ||
+      cls.includes('success')
+    ) {
+      return true;
+    }
+    try {
+      const bg = window.getComputedStyle(circleEl).backgroundColor;
+      const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (m) {
+        const r = parseInt(m[1], 10);
+        const g = parseInt(m[2], 10);
+        const b = parseInt(m[3], 10);
+        // Green color indicator typical of correct/answered questions on Springboard
+        if (g > 90 && g > r * 1.2 && g > b * 1.2) {
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function getAvailablePaletteCircles(roots = getActiveDocuments()) {
+    const list = [];
+    for (const root of roots) {
+      const candidates = [
+        ...root.querySelectorAll('.q-num, .circle, .question-number, .palette-item, .palette-circle, button, span, div, a')
+      ];
+      for (const c of candidates) {
+        if (c.children.length <= 1) {
+          const txt = c.textContent.trim();
+          if (/^\d{1,3}$/.test(txt)) {
+            const rect = c.getBoundingClientRect();
+            // Sidebar palette is strictly on the left (x < 280), never in timer at top center/right
+            if (rect.width > 0 && rect.height > 0 && rect.left < 280 && rect.top > 60) {
+              const num = parseInt(txt, 10);
+              if (num >= 1 && num <= 100 && !list.some(item => item.number === num)) {
+                list.push({
+                  number: num,
+                  element: c,
+                  answered: isCircleAnswered(c)
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    return list.sort((a, b) => a.number - b.number);
+  }
+
+  function hasEnterResponseToast(roots = getActiveDocuments()) {
+    for (const root of roots) {
+      const toasts = [
+        ...root.querySelectorAll('.mat-snack-bar-container, simple-snack-bar, .toast, .alert, .snackbar, [role="alert"]')
+      ];
+      for (const t of toasts) {
+        const text = (t.innerText || t.textContent || '').toLowerCase();
+        if (text.includes('enter your response') || text.includes('select an answer') || text.includes('mandatory')) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  async function confirmBackDialog(roots = getActiveDocuments()) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      await sleep(250);
+      for (const root of roots) {
+        const dialogs = [
+          ...root.querySelectorAll('mat-dialog-container, [role="dialog"], .modal, .modal-dialog, .cdk-overlay-pane')
+        ];
+        for (const dialog of dialogs) {
+          const btns = [...dialog.querySelectorAll('button, [role="button"], a')];
+          for (const b of btns) {
+            const txt = (b.innerText || b.textContent || '').trim().toLowerCase();
+            if (
+              (txt.includes('yes') || txt.includes('leave') || txt.includes('proceed') || txt.includes('back') || txt.includes('ok')) &&
+              !txt.includes('cancel') && !txt.includes('stay') && !txt.includes('no')
+            ) {
+              log(`Confirming back-to-sections dialog: "${txt}"`);
+              b.click();
+              await sleep(600);
+              return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   function clickPaletteCircle(qIndex, roots = getActiveDocuments()) {
     for (const root of roots) {
       const candidates = [
@@ -1088,11 +1225,29 @@
 
   function getCurrentQuestionNumber(roots = getActiveDocuments()) {
     for (const root of roots) {
-      // 1. Check active/highlighted circle in palette (sidebar left < 280) - Most reliable in Springboard!
+      // 1. Heading or question indicator in main area (left > 150) — True current question on screen!
+      const candidates = [...root.querySelectorAll('.question-title, .question-number, h1, h2, h3, h4, h5, h6, div, span, p')];
+      for (const el of candidates) {
+        const txt = el.textContent.trim();
+        if (txt.length > 0 && txt.length < 50) {
+          const match = txt.match(/^Question\s*[:\-\.]?\s*(\d{1,3})$/i) ||
+                        txt.match(/^Q(?:uestion)?\s*[:\-\.]?\s*(\d{1,3})\b/i);
+          if (match) {
+            const rect = el.getBoundingClientRect();
+            if (rect.left > 150 && rect.width > 0 && rect.height > 0) {
+              const num = parseInt(match[1], 10);
+              if (num >= 1 && num <= 100) return num;
+            }
+          }
+        }
+      }
+
+      // 2. Fallback: Palette circle with strictly active class (sidebar left < 280)
       const activeCircles = [
-        ...root.querySelectorAll('.active, .selected, .current, [aria-current="true"], .q-selected, .active-circle, .circle-active')
+        ...root.querySelectorAll('.active, .current, [aria-current="true"], .q-selected, .active-circle, .circle-active')
       ];
       for (const ac of activeCircles) {
+        if (ac.classList.contains('answered') && !ac.classList.contains('active')) continue;
         const txt = ac.textContent.trim();
         const m = txt.match(/^(\d{1,3})$/);
         if (m) {
@@ -1103,37 +1258,21 @@
           }
         }
       }
-
-      // 2. Heading or question indicator in main area (left > 150)
-      const candidates = [...root.querySelectorAll('.question-title, .question-number, h1, h2, h3, h4, h5, h6, div, span, p')];
-      for (const el of candidates) {
-        const txt = el.textContent.trim();
-        if (txt.length > 0 && txt.length < 60) {
-          const match = txt.match(/(?:Question|Q\.?)\s*[:\-\.]?\s*(\d{1,3})/i);
-          if (match) {
-            const rect = el.getBoundingClientRect();
-            if (rect.left > 150 && rect.width > 0 && rect.height > 0) {
-              const num = parseInt(match[1], 10);
-              if (num >= 1 && num <= 100) return num;
-            }
-          }
-        }
-      }
     }
     return null;
   }
 
-  async function waitForQuestionChange(prevQNum, prevSig, maxWaitMs = 2500) {
+  async function waitForQuestionChange(prevQNum, prevSig, maxWaitMs = 3500) {
     const start = Date.now();
     while (Date.now() - start < maxWaitMs) {
-      await sleep(100);
+      await sleep(150);
       const newQNum = getCurrentQuestionNumber();
       if (newQNum !== null && prevQNum !== null && newQNum !== prevQNum) {
         return true;
       }
       const qData = scrapeCurrentQuestion();
       if (qData) {
-        const newSig = qData.questionText + '|' + qData.options.map(o => o.text).join(',');
+        const newSig = `${newQNum || ''}|${qData.questionText}|${qData.options.map(o => o.text).join(',')}`;
         if (newSig !== prevSig) {
           return true;
         }
@@ -1143,50 +1282,16 @@
   }
 
   function getPaletteCircleCount(roots = getActiveDocuments()) {
-    // 1. Look for explicit total questions text e.g. "total 25 questions" or "0 of 25 attempted"
+    const circles = getAvailablePaletteCircles(roots);
+    if (circles.length > 0) return circles.length;
+
+    // Secondary: Look for explicit total questions text e.g. "total 25 questions" within section
     for (const root of roots) {
       const bodyText = root.body?.innerText || root.body?.textContent || '';
       const m1 = bodyText.match(/total\s+(\d{1,3})\s+questions/i);
       if (m1) {
         const n = parseInt(m1[1], 10);
         if (n > 0 && n <= 100) return n;
-      }
-      const m2 = bodyText.match(/(\d+)\s+of\s+(\d{1,3})\s+attempted/i);
-      if (m2) {
-        const n = parseInt(m2[2], 10);
-        if (n > 0 && n <= 100) return n;
-      }
-    }
-
-    // 2. Count consecutive numbered circles strictly inside the left sidebar palette
-    for (const root of roots) {
-      const candidates = [
-        ...root.querySelectorAll('.q-num, .circle, .question-number, .palette-item, .palette-circle, button, span, div, a')
-      ];
-      const foundNumbers = new Set();
-      for (const c of candidates) {
-        if (c.children.length <= 1) {
-          const txt = c.textContent.trim();
-          if (/^\d{1,3}$/.test(txt)) {
-            const rect = c.getBoundingClientRect();
-            // Sidebar palette is strictly on the left (x < 280), never in timer at top center/right
-            if (rect.width > 0 && rect.height > 0 && rect.left < 280 && rect.top > 60) {
-              const n = parseInt(txt, 10);
-              if (n >= 1 && n <= 100) {
-                foundNumbers.add(n);
-              }
-            }
-          }
-        }
-      }
-
-      // Find unbroken consecutive sequence starting from 1: 1, 2, 3...
-      let count = 0;
-      while (foundNumbers.has(count + 1)) {
-        count++;
-      }
-      if (count >= 2) {
-        return count;
       }
     }
 
@@ -1205,12 +1310,6 @@
     target.dispatchEvent(new PointerEvent('pointerup', opts));
     target.dispatchEvent(new MouseEvent('mouseup', opts));
     target.click();
-
-    // Also click inner span/button if present
-    const inner = target.querySelector('button, span, a');
-    if (inner && inner !== target) {
-      inner.click();
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1241,7 +1340,7 @@
         optionContainers = matRadios.map((mr, idx) => {
           const labelContent = mr.querySelector('.mat-radio-label-content');
           let text = labelContent ? (labelContent.innerText || labelContent.textContent) : (mr.innerText || mr.textContent);
-          text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d0-9][\.\)\-]\s*/, '').trim();
+          text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
           const clickTarget = mr.querySelector('label') || mr;
           return {
             element: clickTarget,
@@ -1256,7 +1355,7 @@
         optionContainers = matCheckboxes.map((mc, idx) => {
           const labelContent = mc.querySelector('.mat-checkbox-label, .mat-checkbox-layout');
           let text = labelContent ? (labelContent.innerText || labelContent.textContent) : (mc.innerText || mc.textContent);
-          text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d0-9][\.\)\-]\s*/, '').trim();
+          text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
           const clickTarget = mc.querySelector('label') || mc;
           return {
             element: clickTarget,
@@ -1296,7 +1395,7 @@
             if (!text && input.parentElement) {
               text = input.parentElement.innerText || input.parentElement.textContent;
             }
-            text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d0-9][\.\)\-]\s*/, '').trim();
+            text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
             const clickTarget = input.closest('label, mat-checkbox, .checkbox, .option') || input;
             return {
               element: clickTarget,
@@ -1321,7 +1420,7 @@
             if (!text && input.parentElement) {
               text = input.parentElement.innerText || input.parentElement.textContent;
             }
-            text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d0-9][\.\)\-]\s*/, '').trim();
+            text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
             const clickTarget = input.closest('label, mat-radio-button, .radio, .option') || input;
             return {
               element: clickTarget,
@@ -1340,7 +1439,7 @@
 
           if (customWrappers.length >= 2 && customWrappers.length <= 8) {
             optionContainers = customWrappers.map((cw, idx) => {
-              const text = (cw.innerText || cw.textContent || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d0-9][\.\)\-]\s*/, '').trim();
+              const text = (cw.innerText || cw.textContent || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
               return {
                 element: cw,
                 container: cw,
@@ -1355,47 +1454,93 @@
 
       if (optionContainers.length < 2) continue;
 
-      // Extract Question Stem & Code Snippets from ACTIVE visible question container
+      // ── Robust Question Stem & Code Extraction (Surgically Strip Options) ──
       const firstOpt = optionContainers[0].element;
-      const questionCard = firstOpt.closest(
-        '.question-container, .question-card, .test-question, form, .question-body, div.col-md-9, div.col-md-10, div.col-sm-9, div.col-xs-12'
-      ) || firstOpt.parentElement?.parentElement?.parentElement || root.body;
 
-      // Collect code snippets inside this visible card
+      // Find the main question panel (the right pane on the screen, excluding sidebar palette)
+      let questionCard = firstOpt.closest(
+        '.question-container, .question-card, .test-question, .question-box, form, .question-body, div.col-md-9, div.col-md-10, div.col-sm-9, div.col-xs-12, mat-card'
+      );
+
+      if (!questionCard) {
+        let cur = firstOpt.parentElement;
+        while (cur && cur !== root.body) {
+          const rect = cur.getBoundingClientRect();
+          if (rect.width > 350 && rect.left > 180) {
+            questionCard = cur;
+            break;
+          }
+          cur = cur.parentElement;
+        }
+      }
+      if (!questionCard) questionCard = firstOpt.parentElement?.parentElement?.parentElement || root.body;
+
+      // Collect code snippets (<pre>, <code>, <xmp>, etc.)
       const codeEls = [...questionCard.querySelectorAll('pre, code, xmp, .code-snippet, .code-block, textarea')].filter(isElementRendered);
       let codeSnippet = '';
       if (codeEls.length > 0) {
         codeSnippet = codeEls.map(c => (c.innerText || c.textContent || '').trim()).filter(Boolean).join('\n\n');
       }
 
-      let fullText = (questionCard.innerText || questionCard.textContent || '');
-      const firstOptText = optionContainers[0].text;
-      const optIndex = fullText.indexOf(firstOptText);
       let questionText = '';
-      if (optIndex > 5) {
-        questionText = fullText.slice(0, optIndex).trim();
-      } else {
-        questionText = fullText.slice(0, 600).trim();
+
+      // Surgical DOM Clone Stripping: Remove all options, inputs, buttons, and palette elements
+      try {
+        const clone = questionCard.cloneNode(true);
+
+        // Remove all option wrappers, radios, checkboxes, and choice labels
+        clone.querySelectorAll(
+          'mat-radio-group, mat-radio-button, mat-checkbox, [role="radio"], [role="checkbox"], .options, .options-group, .options-container, .answers, .choices, .option, .radio, .checkbox, input, label'
+        ).forEach(el => el.remove());
+
+        // Remove action buttons (Reset, Save, Next, Submit, Finish)
+        clone.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"], .actions, .action-buttons').forEach(el => el.remove());
+
+        // Remove sidebar, palette, timer, navigation headers, and icons
+        clone.querySelectorAll('.palette, .sidebar, .q-num, .circle, .palette-circle, .question-palette, .timer, .time-left, .header, .nav, .breadcrumb, [class*="fullscreen"]').forEach(el => el.remove());
+
+        let stripped = (clone.innerText || clone.textContent || '').trim();
+
+        // Strip "Question X" prefix
+        stripped = stripped.replace(/^Question\s*[:\-\.]?\s*\d+/i, '').trim();
+
+        // Strip assessment boilerplate
+        stripped = stripped
+          .replace(/OBJECTIVE QUESTIONS/gi, '')
+          .replace(/Assessment\s*-\s*[^\n]+/gi, '')
+          .replace(/\d+\s*:\s*\d+\s*:\s*\d+\s*(Hours|Minutes|Seconds)*/gi, '')
+          .trim();
+
+        if (stripped.length > 5) {
+          questionText = stripped;
+        }
+      } catch (_) {}
+
+      // Fallback: If stripped clone was too short, extract text before first option
+      if (!questionText || questionText.length < 10) {
+        const fullText = (questionCard.innerText || questionCard.textContent || '');
+        const firstOptText = optionContainers[0].text;
+        const optIndex = fullText.indexOf(firstOptText);
+        if (optIndex > 10) {
+          questionText = fullText.slice(0, optIndex).replace(/^Question\s*[:\-\.]?\s*\d+/i, '').trim();
+        } else {
+          questionText = fullText.slice(0, 600).replace(/^Question\s*[:\-\.]?\s*\d+/i, '').trim();
+        }
       }
 
-      // Clean metadata headers, timers, and boilerplate
-      questionText = questionText
-        .replace(/OBJECTIVE QUESTIONS/gi, '')
-        .replace(/Assessment\s*-\s*[^\n]+/gi, '')
-        .replace(/\d+\s*:\s*\d+\s*:\s*\d+\s*(Hours|Minutes|Seconds)*/gi, '')
-        .replace(/Question\s*\d+/gi, '')
-        .trim();
-
-      if (codeSnippet && !questionText.includes(codeSnippet.slice(0, 20))) {
-        questionText = `${questionText}\n\nCode snippet:\n${codeSnippet}`;
+      // Attach any code snippet cleanly
+      if (codeSnippet && !questionText.includes(codeSnippet.slice(0, 25))) {
+        questionText = `${questionText}\n\n[Code]:\n${codeSnippet}`;
       }
 
       if (!isMultipleSelect) {
-        isMultipleSelect = !!questionCard.querySelector('input[type="checkbox"], mat-checkbox, [role="checkbox"]');
+        isMultipleSelect = optionContainers.some(o => o.isCheckbox) ||
+                           !!questionCard.querySelector('input[type="checkbox"], mat-checkbox, [role="checkbox"]') ||
+                           /all that apply|multiple correct/i.test(questionText);
       }
 
       return {
-        questionText: questionText || 'Question statement',
+        questionText: questionText || 'Technical multiple choice question',
         options: optionContainers,
         isMultipleSelect,
         rootDocument: root
@@ -1405,105 +1550,58 @@
     return null;
   }
 
-  // Thorough Angular-compatible option selection (supports radio & checkbox)
+  // Genuine Angular-compatible option selection (supports radio & checkbox)
   function selectOption(opt) {
-    if (!opt || !opt.element) return false;
+    if (!opt) return false;
     const target = opt.element;
     const isCheckbox = opt.isCheckbox || !!target.closest('mat-checkbox, [role="checkbox"], .checkbox');
     const container = opt.container || target.closest(isCheckbox ? 'mat-checkbox, [role="checkbox"]' : 'mat-radio-button, [role="radio"]') || target;
     const input = opt.inputElement || (target.tagName === 'INPUT' ? target : container.querySelector('input'));
+    const label = container.querySelector('label') || target;
 
-    try { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+    try {
+      (container || target).scrollIntoView({ block: 'center', behavior: 'smooth' });
+    } catch (_) {}
 
-    // 1. Dispatch full pointer/mouse sequence on label/container
-    const opts = { bubbles: true, cancelable: true, view: window };
-    target.dispatchEvent(new PointerEvent('pointerdown', opts));
-    target.dispatchEvent(new MouseEvent('mousedown', opts));
-    target.focus?.();
-    target.dispatchEvent(new PointerEvent('pointerup', opts));
-    target.dispatchEvent(new MouseEvent('mouseup', opts));
-    target.click();
+    // 1. ALWAYS thoroughly click the visible label / container FIRST.
+    // In Angular Material and Springboard, the component listens for click on the host / label!
+    const primaryTarget = (label && label !== input) ? label : (container || target);
+    clickElementThoroughly(primaryTarget);
 
-    // 2. Also click inner label or radio/checkbox container
-    const innerTarget = container.querySelector('label, .mat-radio-label, .mat-radio-container, .mat-checkbox-layout, .mat-checkbox-inner-container');
-    if (innerTarget && innerTarget !== target) {
-      innerTarget.click();
-    }
-
-    // 3. Directly click and update native input to trigger Angular ControlValueAccessor
+    // 2. Also ensure the underlying input is clicked and checked for reactive forms
     if (input) {
-      input.click();
-      input.checked = true;
+      if (!input.checked && !isCheckbox) {
+        input.focus?.();
+        input.click();
+      }
+      if (!isCheckbox && !input.checked) {
+        input.checked = true;
+      }
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    // 4. Set Angular classes for visual and state consistency
-    if (container.classList) {
-      if (isCheckbox) {
-        container.classList.add('mat-checkbox-checked');
-      } else {
-        container.classList.add('mat-radio-checked');
-      }
-      container.setAttribute('aria-checked', 'true');
     }
 
     return true;
   }
 
-  function isAnyOptionChecked(options) {
-    for (const opt of options) {
-      const container = opt.container || opt.element;
-      const input = opt.inputElement || container?.querySelector?.('input');
-      if (input && input.checked) return true;
-      if (container && (
-        container.classList?.contains('mat-radio-checked') ||
-        container.classList?.contains('mat-checkbox-checked') ||
-        container.getAttribute?.('aria-checked') === 'true'
-      )) {
-        return true;
-      }
+  function isOptionActuallyChecked(opt) {
+    if (!opt) return false;
+    const container = opt.container || opt.element;
+    const input = opt.inputElement || container?.querySelector?.('input');
+    if (input && input.checked) return true;
+    if (container && (
+      container.classList?.contains('mat-radio-checked') ||
+      container.classList?.contains('mat-checkbox-checked') ||
+      container.getAttribute?.('aria-checked') === 'true'
+    )) {
+      return true;
     }
     return false;
   }
 
-  function forceCheckOption(opt) {
-    if (!opt) return;
-    const target = opt.element;
-    const isCheckbox = opt.isCheckbox || !!target.closest('mat-checkbox, [role="checkbox"]');
-    const container = opt.container || target.closest(isCheckbox ? 'mat-checkbox, [role="checkbox"]' : 'mat-radio-button, [role="radio"]') || target;
-    const input = opt.inputElement || (target.tagName === 'INPUT' ? target : container.querySelector('input'));
-
-    if (input) {
-      input.checked = true;
-      input.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    const label = container.querySelector('label, .mat-radio-label, .mat-radio-container, .mat-checkbox-layout, .mat-checkbox-inner-container');
-    if (label) {
-      label.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    }
-    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-
-    if (container.classList) {
-      if (isCheckbox) {
-        container.classList.add('mat-checkbox-checked');
-      } else {
-        container.classList.add('mat-radio-checked');
-      }
-      container.setAttribute('aria-checked', 'true');
-    }
-  }
-
-  function checkToastError(root) {
-    try {
-      const allText = (root.body?.innerText || '').toLowerCase();
-      return allText.includes('please enter your response to save');
-    } catch (_) {
-      return false;
-    }
+  function isAnyOptionChecked(options) {
+    if (!Array.isArray(options) || options.length === 0) return false;
+    return options.some(opt => isOptionActuallyChecked(opt));
   }
 
   async function confirmSubmitDialog(roots = getActiveDocuments()) {
@@ -1542,107 +1640,207 @@
   // MAIN MULTI-SECTION ASSESSMENT SOLVER ENGINE
   // ═══════════════════════════════════════════════════════════════════════════
 
+  function acquireSolverLock() {
+    try {
+      const topWin = window.top || window;
+      if (topWin.__SPB_SOLVER_ACTIVE__) {
+        return false;
+      }
+      topWin.__SPB_SOLVER_ACTIVE__ = true;
+      return true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function releaseSolverLock() {
+    try {
+      const topWin = window.top || window;
+      topWin.__SPB_SOLVER_ACTIVE__ = false;
+    } catch (_) {}
+  }
+
   async function startAssessmentSolver() {
-    log('🎯 Starting Gemini 3.8 Flash Assessment Solver...');
-    isRunning = true;
-    isPaused  = false;
-    sendStatus({ status: 'running', message: '🎯 Initializing Gemini 3.8 Flash...' });
-
-    const { aiQuizEnabled, geminiApiKey } = await chrome.storage.local.get([
-      'aiQuizEnabled',
-      'geminiApiKey'
-    ]);
-
-    if (aiQuizEnabled === false || !geminiApiKey) {
-      const err = 'Gemini API Key missing! Paste your key in extension settings & click Save & Test.';
-      sendStatus({ status: 'error', message: err });
-      isRunning = false;
+    if (isRunning) return;
+    if (!acquireSolverLock()) {
+      log('Another frame is already executing the solver. Ignoring duplicate request.');
       return;
     }
 
-    // ── STEP 1: Handle Instructions Screen (if Start button present) ──
-    const startBtns = findStartButtons();
-    if (startBtns.length > 0) {
-      log(`Clicking Start button: "${startBtns[0].textContent.trim()}"`);
-      clickElementThoroughly(startBtns[0]);
-      await sleep(2500);
-    }
+    try {
+      log('🎯 Starting Gemini Assessment Solver...');
+      isRunning = true;
+      isPaused  = false;
+      sendStatus({ status: 'running', message: '🎯 Initializing Gemini AI...' });
 
-    // ── STEP 2: Multi-Section Attempt Loop ──
-    let totalQuestionsAnswered = 0;
-    let sectionCount = 0;
+      const { aiQuizEnabled, geminiApiKey } = await chrome.storage.local.get([
+        'aiQuizEnabled',
+        'geminiApiKey'
+      ]);
 
-    while (isRunning) {
-      while (isPaused) { await sleep(400); }
+      if (aiQuizEnabled === false || !geminiApiKey) {
+        const err = 'Gemini API Key missing! Paste your key in extension settings & click Save & Test.';
+        sendStatus({ status: 'error', message: err });
+        return;
+      }
 
-      // Look for available "Attempt Section" / "Resume Section" buttons across all documents
-      const sectionButtons = findAttemptSectionButtons();
+      // ── STEP 1: Handle Instructions Screen (if Start / Retake button present) ──
+      const startBtns = findStartButtons();
+      if (startBtns.length > 0) {
+        log(`Clicking Start/Retake button: "${startBtns[0].textContent.trim()}"`);
+        clickElementThoroughly(startBtns[0]);
+        // Poll for up to 15 seconds for sections or questions to load
+        for (let w = 0; w < 30; w++) {
+          if (!isRunning) break;
+          await sleep(500);
+          if (findAttemptSectionButtons().length > 0 || scrapeCurrentQuestion()) {
+            break;
+          }
+        }
+      }
 
-      if (sectionButtons.length > 0) {
-        sectionCount++;
-        const currentSectionBtn = sectionButtons[0];
-        const sectionCard = currentSectionBtn.closest('.section-card, .section, tr, div') || currentSectionBtn.parentElement;
-        const sectionName = (sectionCard?.innerText || sectionCard?.textContent || '').split('\n')[0].slice(0, 35).trim() || `Section ${sectionCount}`;
+      // ── STEP 2: Multi-Section Attempt Loop ──
+      let totalQuestionsAnswered = 0;
+      let sectionCount = 0;
+      const completedSections = new Set();
 
-        log(`▶ Entering Section: ${sectionName}...`);
-        sendStatus({ status: 'running', message: `Entering ${sectionName}...` });
+      while (isRunning) {
+        while (isPaused) { await sleep(400); }
 
-        clickElementThoroughly(currentSectionBtn);
-        await sleep(2500);
+        // Look for available "Attempt Section" / "Resume Section" buttons across all documents
+        let sectionButtons = findAttemptSectionButtons().filter(btn => {
+          const card = btn.closest('.section-card, .section, mat-card, tr, div') || btn.parentElement;
+          const name = (card?.innerText || card?.textContent || '').split('\n')[0].slice(0, 35).trim();
+          const cardText = (card?.innerText || card?.textContent || '').toLowerCase();
+          if (completedSections.has(name)) return false;
+          if (cardText.includes('100%') || /completed/i.test(cardText)) {
+            completedSections.add(name);
+            return false;
+          }
+          return true;
+        });
 
-        // Solve all questions inside this section
-        const answeredInSection = await solveCurrentSectionQuestions(sectionName);
-        totalQuestionsAnswered += answeredInSection;
-
-        // Return back to Sections screen via Back Arrow
-        log('Section completed. Navigating back to Sections screen...');
-        const backBtn = findBackButtonToSections();
-        if (backBtn) {
-          clickElementThoroughly(backBtn);
-          await sleep(2000);
-        } else {
-          await sleep(1500);
+        // If no section buttons yet and not on a question screen, poll for up to 5 seconds
+        if (sectionButtons.length === 0 && !scrapeCurrentQuestion()) {
+          for (let r = 0; r < 10; r++) {
+            if (!isRunning) break;
+            await sleep(500);
+            sectionButtons = findAttemptSectionButtons().filter(btn => {
+              const card = btn.closest('.section-card, .section, mat-card, tr, div') || btn.parentElement;
+              const name = (card?.innerText || card?.textContent || '').split('\n')[0].slice(0, 35).trim();
+              return !completedSections.has(name);
+            });
+            if (sectionButtons.length > 0 || scrapeCurrentQuestion()) break;
+          }
         }
 
-        // Loop again to see if next section exists
-        continue;
+        if (sectionButtons.length > 0) {
+          sectionCount++;
+          const currentSectionBtn = sectionButtons[0];
+          const sectionCard = currentSectionBtn.closest('.section-card, .section, mat-card, tr, div') || currentSectionBtn.parentElement;
+          const sectionName = (sectionCard?.innerText || sectionCard?.textContent || '').split('\n')[0].slice(0, 35).trim() || `Section ${sectionCount}`;
+
+          log(`▶ Entering Section ${sectionCount}: ${sectionName}...`);
+          sendStatus({ status: 'running', message: `Entering Section ${sectionCount}...` });
+
+          clickElementThoroughly(currentSectionBtn);
+
+          // Wait up to 10 seconds for question DOM to render inside this section
+          let questionReady = false;
+          for (let qw = 0; qw < 20; qw++) {
+            if (!isRunning) break;
+            await sleep(500);
+            if (scrapeCurrentQuestion()) {
+              questionReady = true;
+              break;
+            }
+          }
+
+          if (questionReady) {
+            // Solve all questions inside this section
+            const answeredInSection = await solveCurrentSectionQuestions(sectionName);
+            totalQuestionsAnswered += answeredInSection;
+            completedSections.add(sectionName);
+
+            // Return back to Sections screen via Back Arrow or Sections Tab
+            log(`Section ${sectionName} complete (${answeredInSection} answered). Returning to Sections screen...`);
+            const backBtn = findBackButtonToSections();
+            if (backBtn) {
+              clickElementThoroughly(backBtn);
+              await sleep(600);
+              await confirmBackDialog(); // Confirm any "Leave section" dialog!
+
+              // Wait up to 6 seconds for sections screen to render
+              for (let bw = 0; bw < 15; bw++) {
+                await sleep(400);
+                if (findAttemptSectionButtons().length > 0) break;
+              }
+            } else {
+              await sleep(1500);
+            }
+          }
+
+          continue;
+        }
+
+        // If directly on a question screen without section buttons (single-section assessment):
+        const qData = scrapeCurrentQuestion();
+        if (qData) {
+          log('Single section assessment detected. Solving questions directly...');
+          const answered = await solveCurrentSectionQuestions('Assessment');
+          totalQuestionsAnswered += answered;
+        }
+
+        break;
       }
 
-      // If directly on a question screen without section buttons (e.g. single-section assessment or in-course quiz):
-      const qData = scrapeCurrentQuestion();
-      if (qData) {
-        log('Direct question screen detected. Solving questions directly...');
-        const answered = await solveCurrentSectionQuestions('Assessment');
-        totalQuestionsAnswered += answered;
+      // ── STEP 3: Finish & Submit Test (SAFETY GUARDED) ──
+      if (totalQuestionsAnswered === 0) {
+        const msg = '⚠️ No questions were answered. Solver stopped without submitting to protect your score.';
+        log(msg);
+        sendStatus({ status: 'stopped', message: msg });
+        return;
       }
 
-      // No more sections to attempt!
-      break;
-    }
+      // Block submission if unattempted sections remain!
+      const remainingSections = findAttemptSectionButtons().filter(btn => {
+        const card = btn.closest('.section-card, .section, mat-card, tr, div') || btn.parentElement;
+        const name = (card?.innerText || card?.textContent || '').split('\n')[0].slice(0, 35).trim();
+        return !completedSections.has(name);
+      });
 
-    // ── STEP 3: Finish & Submit Test ──
-    log('All sections attempted! Looking for Finish test button...');
-    sendStatus({ status: 'running', message: 'Submitting completed assessment...' });
-    await sleep(1500);
+      if (remainingSections.length > 0) {
+        const warn = `⚠️ ${remainingSections.length} section(s) still remain unattempted! Submission blocked to protect your score.`;
+        log(warn);
+        sendStatus({ status: 'stopped', message: warn });
+        return;
+      }
 
-    const finishBtn = findFinishButton();
-    if (finishBtn) {
-      log(`Clicking Finish button: "${finishBtn.textContent.trim()}"`);
-      clickElementThoroughly(finishBtn);
+      log(`All questions solved (${totalQuestionsAnswered} answered across ${sectionCount || 1} section(s)). Submitting assessment...`);
+      sendStatus({ status: 'running', message: 'Submitting completed assessment...' });
       await sleep(1500);
-      await confirmSubmitDialog();
-    }
 
-    isRunning = false;
-    const finalMsg = `🎉 Assessment complete! Solved ${totalQuestionsAnswered} questions across ${sectionCount || 1} section(s).`;
-    log(finalMsg);
-    sendStatus({
-      status: 'done',
-      message: finalMsg,
-      completed: totalQuestionsAnswered,
-      total: totalQuestionsAnswered,
-      quizzes: 1
-    });
+      const finishBtn = findFinishButton();
+      if (finishBtn) {
+        log(`Clicking Finish button: "${finishBtn.textContent.trim()}"`);
+        clickElementThoroughly(finishBtn);
+        await sleep(1500);
+        await confirmSubmitDialog();
+      }
+
+      const finalMsg = `🎉 Assessment complete! Solved ${totalQuestionsAnswered} questions across ${sectionCount || 1} section(s).`;
+      log(finalMsg);
+      sendStatus({
+        status: 'done',
+        message: finalMsg,
+        completed: totalQuestionsAnswered,
+        total: totalQuestionsAnswered,
+        quizzes: 1
+      });
+    } finally {
+      isRunning = false;
+      releaseSolverLock();
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1650,9 +1848,12 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function solveCurrentSectionQuestions(sectionName = 'Section') {
-    // Detect question count in this section
-    let totalQuestions = getPaletteCircleCount();
-    if (!totalQuestions) {
+    // Detect all question circles in the left sidebar palette
+    let circles = getAvailablePaletteCircles();
+    let totalQuestions = circles.length;
+
+    if (totalQuestions === 0) {
+      // Fallback: Check for total text e.g. "total 25 questions" or "X of Y attempted"
       const allDocs = getActiveDocuments();
       for (const d of allDocs) {
         const matchTotal = (d.body?.textContent || '').match(/(\d+)\s+of\s+(\d+)\s+attempted/i);
@@ -1663,169 +1864,272 @@
       }
       if (!totalQuestions) totalQuestions = 25;
     }
-    log(`[${sectionName}] Total questions to solve: ${totalQuestions}`);
+
+    log(`[${sectionName}] Questions detected: ${totalQuestions} (${circles.length > 0 ? circles.map(c => c.number).join(', ') : 'sequential'})`);
 
     const answeredSet = new Set();
-    let consecutiveNoQuestion = 0;
-    let lastHandledSig = '';
+    let questionsSolvedCount = 0;
 
-    while (isRunning) {
-      while (isPaused) { await sleep(300); }
+    // Palette-driven solving (guarantees every single question is visited & answered)
+    if (circles.length > 0) {
+      for (let i = 0; i < circles.length; i++) {
+        if (!isRunning) break;
+        while (isPaused) { await sleep(300); }
 
-      const domQNum = getCurrentQuestionNumber();
-      const qData = scrapeCurrentQuestion();
+        // Refresh circle list
+        circles = getAvailablePaletteCircles();
+        const cInfo = circles[i];
+        if (!cInfo) continue;
 
-      if (!qData || !qData.options || qData.options.length < 2) {
-        consecutiveNoQuestion++;
-        const nextTarget = domQNum || (answeredSet.size + 1);
+        const qNum = cInfo.number;
 
-        if (answeredSet.size >= totalQuestions) {
-          log(`[${sectionName}] All ${totalQuestions} questions answered!`);
-          break;
-        }
-
-        if (consecutiveNoQuestion % 4 === 0) {
-          log(`[${sectionName}] Waiting for question options (attempt ${consecutiveNoQuestion}). Target: Q${nextTarget}`);
-          clickPaletteCircle(nextTarget);
-        }
-
-        if (consecutiveNoQuestion > 20) {
-          log(`[${sectionName}] Timeout waiting for question ${nextTarget}. Moving on.`);
-          break;
-        }
-
-        await sleep(400);
-        continue;
-      }
-
-      consecutiveNoQuestion = 0;
-
-      // Real Question Number & Signature
-      const effectiveQNum = domQNum || (answeredSet.size + 1);
-      const qSig = `${effectiveQNum}|${qData.questionText}|${qData.options.map(o => o.text).join(',')}`;
-
-      // Avoid re-solving if we are still on the exact same question that was already answered in this section
-      if (qSig === lastHandledSig && answeredSet.has(effectiveQNum)) {
-        log(`Question ${effectiveQNum} already answered. Advancing to next question...`);
-        const nextQ = effectiveQNum + 1;
-        if (nextQ <= totalQuestions) {
-          clickPaletteCircle(nextQ);
-          await sleep(600);
+        // Skip if already answered
+        if (isCircleAnswered(cInfo.element)) {
+          answeredSet.add(qNum);
           continue;
-        } else {
-          break;
         }
-      }
 
-      log(`[${effectiveQNum}/${totalQuestions}] Asking Gemini AI: "${qData.questionText.slice(0, 45)}..." (Type: ${qData.isMultipleSelect ? 'Multiple' : 'Single'})`);
-      sendStatus({
-        status: 'running',
-        message: `[${effectiveQNum}/${totalQuestions}] Gemini: ${qData.questionText.slice(0, 34)}...`,
-        completed: answeredSet.size,
-        total: totalQuestions,
-        quizzes: 1
-      });
+        // Navigate to question by clicking its palette circle
+        log(`[${sectionName}] Navigating to Question ${qNum}...`);
+        clickElementThoroughly(cInfo.element);
 
-      // ── Call Gemini AI ──
-      const startTime = performance.now();
-      const geminiRes = await new Promise(resolve => {
-        chrome.runtime.sendMessage({
-          type: 'SOLVE_QUIZ_QUESTION',
-          question: qData.questionText,
-          options: qData.options.map(o => o.text),
-          isMultipleSelect: qData.isMultipleSelect
-        }, resolve);
-      });
-      const latencyMs = Math.round(performance.now() - startTime);
-
-      let selectedIndices = [0];
-      let selectedText = '';
-      if (geminiRes?.success && Array.isArray(geminiRes.selected_indices) && geminiRes.selected_indices.length > 0) {
-        log(`Gemini selected: [${geminiRes.selected_indices.join(', ')}] (${geminiRes.explanation || ''})`);
-        selectedIndices = geminiRes.selected_indices;
-        for (const idx of selectedIndices) {
-          const opt = qData.options[idx];
-          if (opt) {
-            selectOption(opt);
-            await sleep(80);
+        // Wait up to 5 seconds for question DOM to reflect this question
+        let qData = null;
+        for (let w = 0; w < 15; w++) {
+          await sleep(300);
+          const curNum = getCurrentQuestionNumber();
+          qData = scrapeCurrentQuestion();
+          if (qData && (curNum === qNum || curNum === null)) {
+            break;
           }
         }
-        selectedText = selectedIndices.map(i => qData.options[i]?.text || `[${i}]`).join('; ');
-      } else {
-        log(`Gemini fallback (${geminiRes?.error || 'no indices'}). Selecting option 0.`);
-        selectedIndices = [0];
-        selectedText = qData.options[0]?.text || '';
-        if (qData.options[0]) {
-          selectOption(qData.options[0]);
-          await sleep(80);
+
+        if (!qData || !qData.options || qData.options.length < 2) {
+          log(`⚠️ Retrying palette circle for Question ${qNum}...`);
+          clickElementThoroughly(cInfo.element);
+          await sleep(800);
+          qData = scrapeCurrentQuestion();
         }
-      }
 
-      // Stream communication into the Live Inspector
-      appendAiCommunicationLog({
-        questionNumber: effectiveQNum,
-        totalQuestions: totalQuestions,
-        questionText: qData.questionText,
-        options: qData.options.map(o => o.text),
-        isMultipleSelect: qData.isMultipleSelect,
-        selectedIndices,
-        selectedText,
-        explanation: geminiRes?.explanation || (geminiRes?.error ? `Fallback reason: ${geminiRes.error}` : ''),
-        model: geminiRes?.model || 'gemini-2.0-flash',
-        latencyMs,
-        timestamp: new Date().toLocaleTimeString(),
-        status: geminiRes?.success ? 'success' : 'fallback'
-      });
-
-      // Verify at least one option is marked checked before saving
-      if (!isAnyOptionChecked(qData.options)) {
-        log('⚠️ Selection check verification failed. Force checking chosen option...');
-        if (qData.options[selectedIndices[0]]) {
-          forceCheckOption(qData.options[selectedIndices[0]]);
-          await sleep(100);
+        if (!qData || !qData.options || qData.options.length < 2) {
+          log(`⚠️ Unable to scrape Question ${qNum}. Advancing.`);
+          continue;
         }
-      }
 
-      answeredSet.add(effectiveQNum);
-      lastHandledSig = qSig;
+        log(`[${qNum}/${totalQuestions}] Asking Gemini AI: "${qData.questionText.slice(0, 48)}..." (Type: ${qData.isMultipleSelect ? 'Multiple' : 'Single'})`);
+        sendStatus({
+          status: 'running',
+          message: `[${qNum}/${totalQuestions}] Gemini: ${qData.questionText.slice(0, 34)}...`,
+          completed: answeredSet.size,
+          total: totalQuestions,
+          quizzes: 1
+        });
 
-      // ── Save Answer ──
-      const saveBtn = findSaveButton([qData.rootDocument]);
-      if (saveBtn) {
-        log(`Saving answer for question ${effectiveQNum}...`);
-        clickElementThoroughly(saveBtn);
+        // ── Call Gemini AI (with rate limit guard) ──
+        const now = Date.now();
+        const elapsed = now - lastApiCallTime;
+        if (elapsed < MIN_API_INTERVAL_MS) {
+          await sleep(MIN_API_INTERVAL_MS - elapsed);
+        }
+        lastApiCallTime = Date.now();
+
+        const startTime = performance.now();
+        const geminiRes = await new Promise(resolve => {
+          chrome.runtime.sendMessage({
+            type: 'SOLVE_QUIZ_QUESTION',
+            question: qData.questionText,
+            options: qData.options.map(o => o.text),
+            isMultipleSelect: qData.isMultipleSelect
+          }, resolve);
+        });
+        const latencyMs = Math.round(performance.now() - startTime);
+
+        let selectedIndices = [0];
+        let selectedText = '';
+        if (geminiRes?.success && Array.isArray(geminiRes.selected_indices) && geminiRes.selected_indices.length > 0) {
+          log(`Gemini selected: [${geminiRes.selected_indices.join(', ')}] (${geminiRes.explanation || ''})`);
+          selectedIndices = geminiRes.selected_indices;
+          for (const idx of selectedIndices) {
+            const opt = qData.options[idx];
+            if (opt) {
+              selectOption(opt);
+              await sleep(150);
+            }
+          }
+          selectedText = selectedIndices.map(i => qData.options[i]?.text || `[${i}]`).join('; ');
+        } else {
+          log(`⚠️ Gemini failed (${geminiRes?.error || 'no indices'}). Retrying once...`);
+          await sleep(1200);
+          const retryRes = await new Promise(resolve => {
+            chrome.runtime.sendMessage({
+              type: 'SOLVE_QUIZ_QUESTION',
+              question: qData.questionText,
+              options: qData.options.map(o => o.text),
+              isMultipleSelect: qData.isMultipleSelect
+            }, resolve);
+          });
+          if (retryRes?.success && Array.isArray(retryRes.selected_indices)) {
+            selectedIndices = retryRes.selected_indices;
+            for (const idx of selectedIndices) {
+              if (qData.options[idx]) selectOption(qData.options[idx]);
+            }
+          } else {
+            selectedIndices = [0];
+            if (qData.options[0]) selectOption(qData.options[0]);
+          }
+          selectedText = selectedIndices.map(i => qData.options[i]?.text || `[${i}]`).join('; ');
+        }
+
+        // Live Inspector Log
+        appendAiCommunicationLog({
+          questionNumber: qNum,
+          totalQuestions: totalQuestions,
+          questionText: qData.questionText,
+          options: qData.options.map(o => o.text),
+          isMultipleSelect: qData.isMultipleSelect,
+          selectedIndices,
+          selectedText,
+          explanation: geminiRes?.explanation || (geminiRes?.error ? `Fallback: ${geminiRes.error}` : ''),
+          model: geminiRes?.model || 'gemini-2.0-flash',
+          latencyMs,
+          timestamp: new Date().toLocaleTimeString(),
+          status: geminiRes?.success ? 'success' : 'fallback'
+        });
+
+        // Allow Angular Reactive Form 350ms to digest selection
         await sleep(350);
 
-        if (checkToastError(qData.rootDocument)) {
-          log('⚠️ Toast detected: "Please enter your response to save"! Force checking and re-saving...');
-          if (qData.options[selectedIndices[0]]) {
-            forceCheckOption(qData.options[selectedIndices[0]]);
-            await sleep(150);
+        // ── Save Answer ──
+        const saveBtn = findSaveButton([qData.rootDocument]);
+        if (saveBtn) {
+          log(`Saving answer for question ${qNum}...`);
+          clickElementThoroughly(saveBtn);
+          await sleep(600);
+
+          // If toast "Please enter your response to save" appears, retry selection & save
+          if (hasEnterResponseToast()) {
+            log(`⚠️ "Please enter your response" toast detected for Q${qNum}. Re-clicking option & re-saving...`);
+            for (const idx of selectedIndices) {
+              if (qData.options[idx]) {
+                selectOption(qData.options[idx]);
+                await sleep(250);
+              }
+            }
             clickElementThoroughly(saveBtn);
-            await sleep(350);
+            await sleep(600);
           }
         }
-      }
 
-      // If all questions answered or on last question, finish section
-      if (answeredSet.size >= totalQuestions || effectiveQNum >= totalQuestions) {
-        log(`[${sectionName}] Successfully completed all ${totalQuestions} questions!`);
-        await sleep(1000);
-        break;
-      }
+        answeredSet.add(qNum);
+        questionsSolvedCount++;
 
-      // Wait cleanly for question transition
-      const changed = await waitForQuestionChange(effectiveQNum, qSig, 2500);
-      if (!changed) {
-        // If clicking Save didn't advance, advance manually via circle
-        const nextQ = effectiveQNum + 1;
-        log(`Save did not auto-transition. Clicking palette circle for Question ${nextQ}...`);
-        clickPaletteCircle(nextQ);
-        await sleep(600);
+        // Wait up to 2 seconds for circle to show answered/green
+        for (let gw = 0; gw < 5; gw++) {
+          if (isCircleAnswered(cInfo.element)) break;
+          await sleep(400);
+        }
+      }
+    } else {
+      // Sequential fallback for pages without sidebar palette
+      let consecutiveNoQuestion = 0;
+      let lastHandledSig = '';
+
+      while (isRunning) {
+        while (isPaused) { await sleep(300); }
+
+        const domQNum = getCurrentQuestionNumber();
+        const qData = scrapeCurrentQuestion();
+
+        if (!qData || !qData.options || qData.options.length < 2) {
+          consecutiveNoQuestion++;
+          if (consecutiveNoQuestion > 20) break;
+          await sleep(400);
+          continue;
+        }
+
+        consecutiveNoQuestion = 0;
+        const effectiveQNum = domQNum || (answeredSet.size + 1);
+        const qSig = `${effectiveQNum}|${qData.questionText}|${qData.options.map(o => o.text).join(',')}`;
+
+        if (qSig === lastHandledSig && answeredSet.has(effectiveQNum)) {
+          break;
+        }
+
+        // Rate limit guard for sequential solver
+        const seqNow = Date.now();
+        const seqElapsed = seqNow - lastApiCallTime;
+        if (seqElapsed < MIN_API_INTERVAL_MS) {
+          await sleep(MIN_API_INTERVAL_MS - seqElapsed);
+        }
+        lastApiCallTime = Date.now();
+
+        const seqStartTime = performance.now();
+        const geminiRes = await new Promise(resolve => {
+          chrome.runtime.sendMessage({
+            type: 'SOLVE_QUIZ_QUESTION',
+            question: qData.questionText,
+            options: qData.options.map(o => o.text),
+            isMultipleSelect: qData.isMultipleSelect
+          }, resolve);
+        });
+        const seqLatencyMs = Math.round(performance.now() - seqStartTime);
+
+        let selectedIndices = [0];
+        let selectedText = '';
+        if (geminiRes?.success && Array.isArray(geminiRes.selected_indices) && geminiRes.selected_indices.length > 0) {
+          selectedIndices = geminiRes.selected_indices;
+          for (const idx of selectedIndices) {
+            if (qData.options[idx]) selectOption(qData.options[idx]);
+          }
+          selectedText = selectedIndices.map(i => qData.options[i]?.text || `[${i}]`).join('; ');
+        } else {
+          selectedIndices = [0];
+          if (qData.options[0]) selectOption(qData.options[0]);
+          selectedText = qData.options[0]?.text || '[0]';
+        }
+
+        // FIX #13: Log to HUD inspector in sequential solver path
+        appendAiCommunicationLog({
+          questionNumber: effectiveQNum,
+          totalQuestions: 0,
+          questionText: qData.questionText,
+          options: qData.options.map(o => o.text),
+          isMultipleSelect: qData.isMultipleSelect,
+          selectedIndices,
+          selectedText,
+          explanation: geminiRes?.explanation || (geminiRes?.error ? `Fallback: ${geminiRes.error}` : ''),
+          model: geminiRes?.model || 'unknown',
+          latencyMs: seqLatencyMs,
+          timestamp: new Date().toLocaleTimeString(),
+          status: geminiRes?.success ? 'success' : 'fallback'
+        });
+
+        await sleep(350);
+
+        const saveBtn = findSaveButton([qData.rootDocument]);
+        if (saveBtn) {
+          clickElementThoroughly(saveBtn);
+          await sleep(600);
+          if (hasEnterResponseToast()) {
+            for (const idx of selectedIndices) {
+              if (qData.options[idx]) selectOption(qData.options[idx]);
+            }
+            clickElementThoroughly(saveBtn);
+            await sleep(600);
+          }
+        }
+
+        answeredSet.add(effectiveQNum);
+        lastHandledSig = qSig;
+        questionsSolvedCount++;
+
+        const changed = await waitForQuestionChange(effectiveQNum, qSig, 3500);
+        if (!changed) break;
       }
     }
 
-    return answeredSet.size;
+    log(`[${sectionName}] Section finished! Successfully answered ${questionsSolvedCount} questions.`);
+    return questionsSolvedCount;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1840,17 +2144,17 @@
           startAssessmentSolver();
         }
         sendResponse({ ok: true });
-        break;
+        return false; // Synchronous response sent
       case 'PAUSE':
         isPaused = true;
         sendStatus({ status: 'paused', message: 'Paused.' });
         sendResponse({ ok: true });
-        break;
+        return false;
       case 'RESUME':
         isPaused = false;
         sendStatus({ status: 'running', message: 'Resumed.' });
         sendResponse({ ok: true });
-        break;
+        return false;
       case 'STOP':
         isRunning = false;
         isPaused  = false;
@@ -1858,23 +2162,12 @@
         const existingHud = document.getElementById('springbored-assignment-hud');
         if (existingHud) existingHud.remove();
         sendResponse({ ok: true });
-        break;
+        return false;
       case 'GET_STATUS':
         sendResponse({ isRunning, isPaused, hasAssessment: hasAssessmentDom() });
-        break;
+        return false;
       default:
-        break;
-    }
-    return true;
-  });
-
-  // Cross-frame coordination via postMessage
-  window.addEventListener('message', (e) => {
-    if (e.data && e.data.type === 'SPB_START_SOLVER') {
-      if (hasAssessmentDom() && !isRunning) {
-        log('Received SPB_START_SOLVER across frames — launching solver!');
-        startAssessmentSolver();
-      }
+        return false; // Don't keep channel open for unrecognized messages
     }
   });
 
