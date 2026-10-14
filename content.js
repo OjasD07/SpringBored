@@ -181,7 +181,7 @@
       };
 
       let elapsed = 0;
-      const pollMs = 500;
+      const pollMs = 150;
       const maxWaitMs = 45000; // 45s max to find & finish video
 
       const poll = setInterval(async () => {
@@ -191,6 +191,12 @@
         const video = document.querySelector('video');
 
         if (video && video.readyState >= 2 && video.duration > 0 && !isNaN(video.duration)) {
+          // If this video element is already ended from a previous lesson and still lingering,
+          // wait for the new lesson video to load (for up to 3.5s)
+          if (video.ended && video.currentTime >= video.duration - 0.5 && elapsed < 3500) {
+            return;
+          }
+
           clearInterval(poll);
           const dur = video.duration;
           log(`Video ready. Duration=${dur.toFixed(1)}s`);
@@ -204,9 +210,9 @@
             try { await video.play(); } catch (_) {}
           }
 
-        // Seek to 3s before end
+          // Seek to 3s before end
           const seekTo = Math.max(0, dur - 3);
-          await sleep(400);
+          await sleep(150);
 
           // Video.js wraps the native <video> — setting currentTime directly works,
           // but we should also try the vjs player API if available
@@ -223,26 +229,26 @@
           // Listen for end
           const onEnded = async () => {
             video.removeEventListener('ended', onEnded);
-            log('Video ended. Waiting 2s...');
-            await sleep(2000);
+            log('Video ended. Registering completion (1s)...');
+            await sleep(1000);
             done('video_done');
           };
           video.addEventListener('ended', onEnded);
 
-          // Safety: if still not resolved 12s after seek, force advance
+          // Safety: if still not resolved 10s after seek, force advance
           setTimeout(async () => {
             video.removeEventListener('ended', onEnded);
             if (!resolved) {
               log('Safety timeout — advancing anyway');
-              await sleep(1500);
+              await sleep(1000);
               done('video_timeout');
             }
-          }, 12000);
+          }, 10000);
 
         } else if (elapsed >= maxWaitMs) {
           clearInterval(poll);
           log('No video found — treating as non-video slide content');
-          await sleep(2500);
+          await sleep(1500);
           done('no_video');
         }
       }, pollMs);
@@ -269,7 +275,7 @@
       if (btn && !btn.disabled && !btn.hasAttribute('disabled')) {
         log(`Clicking Next via "${sel}"`);
         btn.click();
-        await sleep(3000);
+        await sleep(800);
         return true;
       }
     }
@@ -287,7 +293,7 @@
         if (rect.left > window.innerWidth * 0.35 && rect.width < 80) {
           log(`Clicking Next via icon "${iconText}" at x=${rect.left}`);
           btn.click();
-          await sleep(3000);
+          await sleep(800);
           return true;
         }
       }
@@ -314,9 +320,26 @@
 
     sendStatus({ status: 'running', message: 'Opening Contents tab...' });
 
-    // 1. Open Contents tab
-    await openContentsTab();
-    await sleep(1000);
+    // 1. Explicitly open Contents tab and ensure it is ready before starting automation
+    let tabReady = false;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      await openContentsTab();
+      await sleep(1000);
+      const toc = document.querySelector('.viewer-toc-container, #ws-viewer-toc-tree-parent');
+      if (toc) {
+        tabReady = true;
+        break;
+      }
+      log(`Waiting for Contents tab to open (attempt ${attempt}/4)...`);
+      await sleep(600);
+    }
+
+    if (!tabReady) {
+      log('Proceeding: TOC container not immediately confirmed');
+    }
+
+    sendStatus({ status: 'running', message: 'Scanning course lessons...' });
+    await sleep(600);
 
     // 2. Expand all folders
     await expandAllFolders();
@@ -376,10 +399,22 @@
       log(`▶ [${i + 1}/${lessons.length}] "${title}"`);
       sendStatus({ status: 'running', message: `[${i + 1}/${lessons.length}] ${title}`, completed, total: lessons.length, skipped });
 
-      // Click the lesson in the sidebar
-      try { lesson.scrollIntoView({ block: 'nearest' }); } catch (_) {}
-      lesson.click();
-      await sleep(2800); // allow SPA to load content
+      // Check if clicking Next already loaded and selected this lesson
+      const isAlreadyActive =
+        lesson.getAttribute('aria-selected') === 'true' ||
+        lesson.classList.contains('active') ||
+        lesson.classList.contains('mat-tree-node-selected') ||
+        lesson.classList.contains('ws-player-tree-node-active');
+
+      if (!isAlreadyActive) {
+        // Click the lesson in the sidebar
+        try { lesson.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+        lesson.click();
+        await sleep(600); // allow SPA to start loading content
+      } else {
+        log(`Lesson already active via Next navigation: "${title}"`);
+        await sleep(150);
+      }
 
       // Handle video / non-video
       await handleVideoContent();
@@ -391,7 +426,7 @@
       sendStatus({ status: 'running', message: `✓ Done: ${title}`, completed, total: lessons.length, skipped });
 
       // Short breathe between lessons
-      await sleep(1200);
+      await sleep(250);
     }
 
     // ── Finished ──
