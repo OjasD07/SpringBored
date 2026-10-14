@@ -155,39 +155,212 @@
   }
 
   function isCompleted(el) {
-    // Real DOM: completed nodes get an 'is-completed' or 'completed' class,
-    // OR their ws-viewer-icon shows a checkmark/tick state.
-    const cls = (el.className?.toString() || '').toLowerCase();
-    const hasCheckIcon = !!el.querySelector(
-      'mat-icon.tick, mat-icon.done, [class*="tick"], [class*="complete"], ws-viewer-icon[status="completed"]'
+    if (!el) return false;
+
+    // If it has a pending "Mark as Complete" button, it is NOT completed yet!
+    const markBtn = el.querySelector(
+      'button[mattooltip*="complete" i], ' +
+      'button[aria-label*="complete" i], ' +
+      '[mattooltip="Mark as Complete"], ' +
+      '[aria-label="Mark as Complete"], ' +
+      '[title="Mark as Complete"]'
     );
-    // Also check aria-selected or a data attribute marking completion
+    if (markBtn) return false;
+
+    // Real DOM: completed nodes get a checkmark icon or completed status
+    const cls = (el.className?.toString() || '').toLowerCase();
+    const hasCompletedBadge = !!el.querySelector(
+      'mat-icon.tick, mat-icon.done, .status-completed, .item-completed, ' +
+      'ws-viewer-icon[status="completed"], [data-status="completed"]'
+    );
+
     return (
-      hasCheckIcon ||
-      cls.includes('completed') ||
-      cls.includes('is-complete') ||
-      el.getAttribute('aria-checked') === 'true' ||
+      hasCompletedBadge ||
+      cls.includes('is-completed') ||
+      cls.includes('ws-player-tree-node-completed') ||
       el.getAttribute('data-status') === 'completed'
     );
   }
 
-  // ─── STEP 4: Handle video content ─────────────────────────────────────────
-  // Seek to end, wait for "ended", then resolve.
-  function handleVideoContent() {
-    return new Promise((resolve) => {
+  // ─── STEP 4A: Confirm "Mark as complete" dialog if present ───────────────
+  async function confirmDialogIfPresent() {
+    const dialogs = [
+      ...document.querySelectorAll('mat-dialog-container, [role="dialog"], .mat-dialog-container, .cdk-overlay-pane')
+    ];
+
+    for (const dialog of dialogs) {
+      const rect = dialog.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+
+      const dialogText = (dialog.textContent || '').toLowerCase();
+      if (
+        dialogText.includes('mark as complete') ||
+        dialogText.includes('learning content') ||
+        dialogText.includes('learning duration') ||
+        dialogText.includes('confirm')
+      ) {
+        log('Detected "Mark as complete" confirmation dialog');
+
+        const buttons = [...dialog.querySelectorAll('button, [role="button"]')];
+
+        // 1. Look for the button explicitly stating "Mark as complete" or "Mark as..."
+        for (const btn of buttons) {
+          if (btn.disabled || btn.hasAttribute('disabled')) continue;
+          const text = (btn.textContent || '').trim();
+          if (/^mark\s*(as)?/i.test(text) || /confirm/i.test(text) || /yes/i.test(text)) {
+            log(`Clicking confirmation dialog button: "${text}"`);
+            btn.click();
+            await sleep(1000);
+            return true;
+          }
+        }
+
+        // 2. If no explicit text, find the primary/accent button that is not "Cancel"
+        const confirmBtn = buttons.find(b => {
+          if (b.disabled || b.hasAttribute('disabled')) return false;
+          const text = (b.textContent || '').trim().toLowerCase();
+          return !text.includes('cancel') && !text.includes('close') && !text.includes('dismiss');
+        });
+
+        if (confirmBtn) {
+          log(`Clicking non-cancel dialog button: "${confirmBtn.textContent.trim()}"`);
+          confirmBtn.click();
+          await sleep(1000);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  // ─── STEP 4B: Mark non-video / text / web-module content as complete ──────
+  async function markContentAsComplete(lessonNode) {
+    // 0. If a confirmation dialog is ALREADY open, confirm it immediately!
+    if (await confirmDialogIfPresent()) {
+      return true;
+    }
+
+    log('Checking for "Mark as Complete" button...');
+
+    // Collect candidate scopes: current tree node, active node, TOC, and document
+    const candidateScopes = [];
+    if (lessonNode) candidateScopes.push(lessonNode);
+
+    const activeNode = document.querySelector(
+      'mat-tree-node.ws-player-tree-node.active, ' +
+      'mat-tree-node.ws-player-tree-node[aria-selected="true"], ' +
+      'mat-tree-node.ws-player-tree-node.mat-tree-node-selected'
+    );
+    if (activeNode && activeNode !== lessonNode) candidateScopes.push(activeNode);
+
+    const toc = document.querySelector('.viewer-toc-container, .toc-container');
+    if (toc) candidateScopes.push(toc);
+
+    candidateScopes.push(document);
+
+    let clicked = false;
+
+    // 1. Search by tooltips, aria-labels, titles, and text
+    for (const scope of candidateScopes) {
+      if (clicked) break;
+      const candidates = [
+        ...scope.querySelectorAll('button, [role="button"], mat-icon, ws-viewer-icon, a')
+      ];
+
+      for (const el of candidates) {
+        if (el.disabled || el.hasAttribute('disabled')) continue;
+
+        const tip   = (el.getAttribute('mattooltip') || el.getAttribute('mat-tooltip') || '').trim();
+        const aria  = (el.getAttribute('aria-label') || '').trim();
+        const title = (el.getAttribute('title') || '').trim();
+        const text  = (el.textContent || '').trim();
+
+        // Avoid matching "Cancel" or buttons inside unrelated dialogs
+        if (/cancel/i.test(text) || /cancel/i.test(aria)) continue;
+
+        if (
+          /mark.*complete/i.test(tip)   ||
+          /mark.*complete/i.test(aria)  ||
+          /mark.*complete/i.test(title) ||
+          /mark (as )?complete/i.test(text)
+        ) {
+          log(`Clicking "Mark as Complete" button (tip="${tip}", aria="${aria}", text="${text}")`);
+          const clickTarget = el.closest('button, [role="button"]') || el;
+          clickTarget.click();
+          clicked = true;
+          break;
+        }
+      }
+    }
+
+    // 2. Fallback: check if the lessonNode has an action button with check/done icon
+    if (!clicked && lessonNode) {
+      const buttons = [...lessonNode.querySelectorAll('button, [role="button"]')];
+      for (const btn of buttons) {
+        if (btn.disabled || btn.hasAttribute('disabled')) continue;
+        const icon = btn.querySelector('mat-icon');
+        const iconName = (icon?.textContent || '').trim().toLowerCase();
+        if (iconName === 'done' || iconName === 'done_all' || iconName === 'check' || iconName === 'check_circle') {
+          log(`Clicking lesson action button with icon "${iconName}"`);
+          btn.click();
+          clicked = true;
+          break;
+        }
+      }
+    }
+
+    if (clicked) {
+      // 3. Wait for confirmation dialog to appear and click confirm!
+      for (let attempt = 0; attempt < 8; attempt++) {
+        await sleep(200);
+        const confirmed = await confirmDialogIfPresent();
+        if (confirmed) {
+          log('Confirmation dialog handled');
+          return true;
+        }
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  // ─── STEP 4: Handle video or text / web-module content ───────────────────
+  // Seek to end for video, or click "Mark as Complete" for reading content.
+  function handleContent(lessonNode) {
+    return new Promise(async (resolve) => {
       let resolved = false;
       const done = (reason) => {
         if (!resolved) { resolved = true; resolve(reason); }
       };
 
+      // 1. Check right away if this reading material has a "Mark as Complete" button
+      if (await markContentAsComplete(lessonNode)) {
+        log('Content marked as completed via button');
+        return done('marked_complete');
+      }
+
+      // 2. Poll for video OR Mark as Complete button
       let elapsed = 0;
       const pollMs = 150;
-      const maxWaitMs = 45000; // 45s max to find & finish video
+      const maxWaitMs = 6000; // 6s max before assuming static slide content
 
       const poll = setInterval(async () => {
         if (!isRunning || isPaused) { clearInterval(poll); return done('paused'); }
 
         elapsed += pollMs;
+
+        // Re-check for Mark as Complete button during the first 2.5 seconds
+        if (elapsed <= 2500 && elapsed % 450 === 0) {
+          const marked = await markContentAsComplete(lessonNode);
+          if (marked) {
+            clearInterval(poll);
+            log('Content marked as completed via button (after mount)');
+            return done('marked_complete');
+          }
+        }
+
         const video = document.querySelector('video');
 
         if (video && video.readyState >= 2 && video.duration > 0 && !isNaN(video.duration)) {
@@ -247,8 +420,13 @@
 
         } else if (elapsed >= maxWaitMs) {
           clearInterval(poll);
-          log('No video found — treating as non-video slide content');
-          await sleep(1500);
+          // Final check for Mark as Complete before giving up
+          const finalMark = await markContentAsComplete(lessonNode);
+          if (finalMark) {
+            return done('marked_complete');
+          }
+          log('No video or complete button found — treating as non-video slide content');
+          await sleep(1000);
           done('no_video');
         }
       }, pollMs);
@@ -416,8 +594,8 @@
         await sleep(150);
       }
 
-      // Handle video / non-video
-      await handleVideoContent();
+      // Handle video / text / web-module / mark-as-complete
+      await handleContent(lesson);
 
       // Click Next to confirm completion
       await clickNextButton();
