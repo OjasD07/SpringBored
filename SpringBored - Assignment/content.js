@@ -851,7 +851,7 @@ Respond ONLY with valid JSON:
       const fallbackLogoUrl =
         "data:image/svg+xml;utf8," +
         encodeURIComponent(
-          '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><rect width="44" height="44" rx="10" fill="#070d17"/><circle cx="22" cy="22" r="13" fill="none" stroke="#38bdf8" stroke-width="3.5"/><path d="M19 15l10 7-10 7V15z" fill="#fb923c"/></svg>',
+          '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><rect width="44" height="44" rx="10" fill="#244534"/><circle cx="22" cy="22" r="13" fill="none" stroke="#e5a952" stroke-width="3.5"/><path d="M19 15l10 7-10 7V15z" fill="#e6926d"/></svg>',
         );
       let hudLogoUrl = fallbackLogoUrl;
       try {
@@ -945,14 +945,14 @@ Respond ONLY with valid JSON:
           touch-action: none;
         }
         .sb-hud-bar {
-          background: linear-gradient(180deg, #0f192a 0%, #09101c 100%);
-          border: 1px solid #1f314d;
-          border-top: 2px solid #38bdf8;
+          background: linear-gradient(180deg, #244534 0%, #162b21 100%);
+          border: 1px solid #355d48;
+          border-top: 2px solid #e5a952;
           border-radius: 10px;
           padding: 11px 14px;
           width: 316px;
-          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
-          color: #f1f5f9;
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+          color: #f3ebd3;
           display: flex;
           flex-direction: column;
           gap: 9px;
@@ -961,7 +961,7 @@ Respond ONLY with valid JSON:
         #springbored-assignment-hud.sb-hud-enlarged .sb-hud-bar {
           width: 536px;
           max-width: calc(100vw - 36px);
-          box-shadow: 0 22px 54px rgba(0, 0, 0, 0.78);
+          box-shadow: 0 22px 54px rgba(0, 0, 0, 0.68);
         }
         .sb-hud-header {
           display: flex;
@@ -969,7 +969,7 @@ Respond ONLY with valid JSON:
           justify-content: space-between;
           cursor: grab;
           padding-bottom: 7px;
-          border-bottom: 1px solid #1b2a42;
+          border-bottom: 1px solid #2e523f;
         }
         .sb-hud-header:active {
           cursor: grabbing;
@@ -980,21 +980,22 @@ Respond ONLY with valid JSON:
           gap: 7px;
         }
         .sb-hud-logo {
-          width: 22px;
-          height: 22px;
+          width: 24px;
+          height: 24px;
           flex-shrink: 0;
           border-radius: 5px;
           object-fit: cover;
-          border: 1px solid rgba(56, 189, 248, 0.45);
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+          border: 1px solid rgba(243, 235, 211, 0.55);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
           display: block;
-          background: #070d17;
+          background: #244534;
         }
         .sb-hud-title {
-          color: #f1f5f9;
-          font-size: 13.5px;
+          color: #f3ebd3;
+          font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+          font-size: 14px;
           font-weight: 700;
-          letter-spacing: -0.25px;
+          letter-spacing: -0.2px;
         }
         .sb-hud-model {
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -1002,11 +1003,11 @@ Respond ONLY with valid JSON:
           font-weight: 600;
           letter-spacing: 0.45px;
           text-transform: uppercase;
-          background: rgba(56, 189, 248, 0.12);
-          color: #38bdf8;
+          background: rgba(229, 169, 82, 0.16);
+          color: #e5a952;
           padding: 2px 6px;
           border-radius: 4px;
-          border: 1px solid rgba(56, 189, 248, 0.32);
+          border: 1px solid rgba(229, 169, 82, 0.42);
         }
         .sb-hud-header-tools {
           display: flex;
@@ -1016,7 +1017,7 @@ Respond ONLY with valid JSON:
         .sb-hud-tool-btn {
           background: transparent;
           border: 1px solid transparent;
-          color: #8b9bb4;
+          color: #98b09f;
           cursor: pointer;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 11.5px;
@@ -1027,9 +1028,9 @@ Respond ONLY with valid JSON:
           transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
         }
         .sb-hud-tool-btn:hover {
-          color: #f1f5f9;
-          background: #152236;
-          border-color: #253957;
+          color: #f3ebd3;
+          background: #274a39;
+          border-color: #3d6952;
         }
         .sb-hud-content {
           display: flex;
@@ -1041,8 +1042,8 @@ Respond ONLY with valid JSON:
           align-items: center;
           gap: 7px;
           padding: 6px 8px;
-          background: #070d17;
-          border: 1px solid #17253a;
+          background: #12231a;
+          border: 1px solid #294938;
           border-radius: 6px;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 10.5px;
@@ -1051,15 +1052,15 @@ Respond ONLY with valid JSON:
           width: 7px;
           height: 7px;
           border-radius: 50%;
-          background: #34d399;
+          background: #96c99e;
           flex-shrink: 0;
         }
         .sb-hud-dot.busy {
-          background: #fb923c;
+          background: #e6926d;
           animation: sb-pulse 1.2s infinite;
         }
         .sb-hud-status {
-          color: #cbd5e1;
+          color: #d4dfd0;
           flex: 1;
           white-space: nowrap;
           overflow: hidden;
@@ -1068,7 +1069,7 @@ Respond ONLY with valid JSON:
         .sb-hud-progress {
           font-size: 10px;
           font-weight: 700;
-          color: #38bdf8;
+          color: #e5a952;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           flex-shrink: 0;
         }
@@ -1078,10 +1079,10 @@ Respond ONLY with valid JSON:
           gap: 6px;
         }
         .sb-hud-action-btn {
-          background: linear-gradient(180deg, #fb923c 0%, #f97316 100%);
-          border: 1px solid #fb923c;
+          background: linear-gradient(180deg, #eca07c 0%, #e6926d 50%, #df825a 100%);
+          border: 1px solid #f3ebd3;
           border-radius: 6px;
-          color: #06101e;
+          color: #162b21;
           padding: 9px 12px;
           font-size: 12px;
           font-weight: 700;
@@ -1090,18 +1091,18 @@ Respond ONLY with valid JSON:
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 3px 12px rgba(249, 115, 22, 0.28);
+          box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
         }
         .sb-hud-action-btn:hover {
-          background: linear-gradient(180deg, #fdba74 0%, #fb923c 100%);
+          background: linear-gradient(180deg, #f2b091 0%, #eca07c 100%);
           transform: translateY(-1px);
-          box-shadow: 0 5px 16px rgba(249, 115, 22, 0.36);
+          box-shadow: 0 5px 16px rgba(0, 0, 0, 0.35);
         }
         .sb-hud-action-btn.active {
-          background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
-          border-color: #fbbf24;
-          color: #06101e;
-          box-shadow: 0 3px 12px rgba(245, 158, 11, 0.28);
+          background: linear-gradient(180deg, #ecc071 0%, #e5a952 100%);
+          border-color: #f3ebd3;
+          color: #162b21;
+          box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
         }
         .sb-hud-stream-toggle-row {
           display: flex;
@@ -1109,9 +1110,9 @@ Respond ONLY with valid JSON:
           justify-content: space-between;
         }
         .sb-hud-stream-toggle-btn {
-          background: #0c1524;
-          border: 1px solid #1e2f48;
-          color: #cbd5e1;
+          background: #14271d;
+          border: 1px solid #2e523f;
+          color: #d4dfd0;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 9.5px;
           font-weight: 600;
@@ -1127,18 +1128,18 @@ Respond ONLY with valid JSON:
           transition: all 0.15s ease;
         }
         .sb-hud-stream-toggle-btn:hover {
-          background: rgba(56, 189, 248, 0.1);
-          border-color: rgba(56, 189, 248, 0.45);
-          color: #f1f5f9;
+          background: rgba(229, 169, 82, 0.14);
+          border-color: rgba(229, 169, 82, 0.5);
+          color: #f3ebd3;
         }
         .sb-hud-stream-dot {
-          color: #34d399;
+          color: #96c99e;
           font-size: 8px;
         }
         .sb-hud-stream-badge {
-          background: rgba(56, 189, 248, 0.16);
-          border: 1px solid rgba(56, 189, 248, 0.35);
-          color: #38bdf8;
+          background: rgba(229, 169, 82, 0.18);
+          border: 1px solid rgba(229, 169, 82, 0.42);
+          color: #e5a952;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           padding: 1px 6px;
           border-radius: 4px;
@@ -1151,7 +1152,7 @@ Respond ONLY with valid JSON:
           gap: 6px;
           margin-top: 2px;
           padding-top: 8px;
-          border-top: 1px solid #1b2a42;
+          border-top: 1px solid #2e523f;
           max-height: 380px;
         }
         #springbored-assignment-hud.sb-hud-enlarged .sb-hud-inspector {
@@ -1167,7 +1168,7 @@ Respond ONLY with valid JSON:
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 8.5px;
           font-weight: 700;
-          color: #38bdf8;
+          color: #e5a952;
           letter-spacing: 0.65px;
         }
         .sb-hud-insp-right {
@@ -1176,9 +1177,9 @@ Respond ONLY with valid JSON:
           gap: 5px;
         }
         .sb-hud-insp-subbtn {
-          background: #0c1524;
-          border: 1px solid #1e2f48;
-          color: #8b9bb4;
+          background: #14271d;
+          border: 1px solid #2e523f;
+          color: #98b09f;
           border-radius: 4px;
           padding: 2px 6px;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -1187,8 +1188,8 @@ Respond ONLY with valid JSON:
           transition: color 0.15s ease, border-color 0.15s ease;
         }
         .sb-hud-insp-subbtn:hover {
-          color: #f1f5f9;
-          border-color: #38bdf8;
+          color: #f3ebd3;
+          border-color: #e5a952;
         }
         .sb-hud-pills-bar {
           display: flex;
@@ -1203,13 +1204,13 @@ Respond ONLY with valid JSON:
           height: 3px;
         }
         .sb-hud-pills-bar::-webkit-scrollbar-thumb {
-          background: #273c5c;
+          background: #3d6952;
           border-radius: 4px;
         }
         .sb-hud-q-pill {
-          background: #0c1524;
-          border: 1px solid #1e2f48;
-          color: #8b9bb4;
+          background: #14271d;
+          border: 1px solid #2e523f;
+          color: #98b09f;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 9px;
           font-weight: 600;
@@ -1220,14 +1221,14 @@ Respond ONLY with valid JSON:
           transition: all 0.15s ease;
         }
         .sb-hud-q-pill:hover {
-          background: rgba(56, 189, 248, 0.14);
-          color: #f1f5f9;
-          border-color: #38bdf8;
+          background: rgba(229, 169, 82, 0.18);
+          color: #f3ebd3;
+          border-color: #e5a952;
         }
         .sb-hud-q-pill.active {
-          background: #38bdf8;
-          color: #06101e;
-          border-color: #38bdf8;
+          background: #e5a952;
+          color: #162b21;
+          border-color: #f3ebd3;
           font-weight: 700;
         }
         .sb-hud-stream-feed {
@@ -1245,19 +1246,19 @@ Respond ONLY with valid JSON:
           width: 4px;
         }
         .sb-hud-stream-feed::-webkit-scrollbar-thumb {
-          background: #273c5c;
+          background: #3d6952;
           border-radius: 4px;
         }
         .sb-hud-stream-placeholder {
           font-size: 10.5px;
-          color: #5e708d;
+          color: #6c8774;
           text-align: center;
           padding: 16px 8px;
           font-style: italic;
         }
         .sb-hud-card {
-          background: #0b1322;
-          border: 1px solid #1b2b44;
+          background: #172d22;
+          border: 1px solid #2c4e3c;
           border-radius: 6px;
           padding: 9px 11px;
           font-size: 11px;
@@ -1266,10 +1267,10 @@ Respond ONLY with valid JSON:
           gap: 7px;
         }
         .sb-hud-card.success {
-          border-left: 3px solid #34d399;
+          border-left: 3px solid #96c99e;
         }
         .sb-hud-card.fallback {
-          border-left: 3px solid #f59e0b;
+          border-left: 3px solid #e5a952;
         }
         .sb-hud-card-top {
           display: flex;
@@ -1279,13 +1280,13 @@ Respond ONLY with valid JSON:
         .sb-hud-card-qbadge {
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-weight: 700;
-          color: #fb923c;
+          color: #e6926d;
           font-size: 10.5px;
         }
         .sb-hud-card-time {
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 9px;
-          color: #5e708d;
+          color: #6c8774;
           margin-left: 6px;
         }
         .sb-hud-card-perf {
@@ -1296,14 +1297,14 @@ Respond ONLY with valid JSON:
         .sb-hud-card-latency {
           font-size: 9px;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.12);
+          color: #e5a952;
+          background: rgba(229, 169, 82, 0.14);
           padding: 1px 5px;
           border-radius: 4px;
         }
         .sb-hud-card-model {
           font-size: 9px;
-          color: #8b9bb4;
+          color: #98b09f;
         }
         .sb-hud-card-prompt {
           display: flex;
@@ -1314,15 +1315,15 @@ Respond ONLY with valid JSON:
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 8.5px;
           font-weight: 700;
-          color: #5e708d;
+          color: #6c8774;
           letter-spacing: 0.4px;
         }
         .sb-hud-prompt-text {
-          background: #070d17;
-          border: 1px solid #152236;
+          background: #112219;
+          border: 1px solid #264535;
           padding: 6px 8px;
           border-radius: 5px;
-          color: #e2e8f0;
+          color: #f3ebd3;
           font-size: 10.5px;
           line-height: 1.4;
           white-space: pre-wrap;
@@ -1340,40 +1341,40 @@ Respond ONLY with valid JSON:
           gap: 6px;
           padding: 3.5px 7px;
           border-radius: 4px;
-          color: #8b9bb4;
+          color: #98b09f;
           font-size: 10px;
-          background: #070d17;
+          background: #112219;
           border: 1px solid transparent;
         }
         .sb-hud-stream-opt.chosen {
-          background: rgba(16, 185, 129, 0.13);
-          border-color: rgba(16, 185, 129, 0.35);
-          color: #a7f3d0;
+          background: rgba(132, 152, 124, 0.22);
+          border-color: rgba(150, 201, 158, 0.45);
+          color: #f3ebd3;
           font-weight: 600;
         }
         .sb-hud-stream-idx {
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          color: #38bdf8;
+          color: #e5a952;
           font-weight: 700;
           flex-shrink: 0;
         }
         .sb-hud-stream-opt.chosen .sb-hud-stream-idx {
-          color: #34d399;
+          color: #96c99e;
         }
         .sb-hud-stream-txt {
           flex: 1;
           word-break: break-word;
         }
         .sb-hud-stream-check {
-          color: #34d399;
+          color: #96c99e;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 8.5px;
           font-weight: 700;
           flex-shrink: 0;
         }
         .sb-hud-card-reply {
-          background: rgba(56, 189, 248, 0.08);
-          border: 1px solid rgba(56, 189, 248, 0.25);
+          background: rgba(229, 169, 82, 0.1);
+          border: 1px solid rgba(229, 169, 82, 0.32);
           border-radius: 5px;
           padding: 7px 9px;
           display: flex;
@@ -1381,14 +1382,14 @@ Respond ONLY with valid JSON:
           gap: 3px;
         }
         .sb-hud-ans-highlight {
-          color: #f1f5f9;
+          color: #f3ebd3;
           font-size: 11px;
         }
         .sb-hud-ans-highlight strong {
-          color: #38bdf8;
+          color: #e5a952;
         }
         .sb-hud-exp-text {
-          color: #cbd5e1;
+          color: #d4dfd0;
           font-size: 10px;
           line-height: 1.35;
         }
@@ -1406,25 +1407,25 @@ Respond ONLY with valid JSON:
           gap: 4px;
           margin-top: 2px;
           padding-top: 8px;
-          border-top: 1px solid #1b2a42;
-          color: #8b9bb4;
+          border-top: 1px solid #2e523f;
+          color: #98b09f;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 8.5px;
           letter-spacing: 0.15px;
         }
         .sb-hud-footer a {
-          color: #cbd5e1;
+          color: #d4dfd0;
           text-decoration: none;
-          border-bottom: 1px solid rgba(139, 155, 180, 0.35);
+          border-bottom: 1px solid rgba(212, 223, 208, 0.35);
           transition: color 0.15s ease, border-color 0.15s ease;
         }
         .sb-hud-footer a:hover {
-          color: #38bdf8;
-          border-color: #38bdf8;
+          color: #e5a952;
+          border-color: #e5a952;
         }
         .sb-hud-footer-brand {
           font-weight: 700;
-          color: #f1f5f9 !important;
+          color: #f3ebd3 !important;
         }
       `;
       (document.head || document.documentElement).appendChild(style);
@@ -1503,7 +1504,7 @@ Respond ONLY with valid JSON:
             expandBtn.title = "Shrink / Compact Window";
           }
           if (toggleRowBtn) {
-            toggleRowBtn.style.background = "rgba(56, 189, 248, 0.14)";
+            toggleRowBtn.style.background = "rgba(229, 169, 82, 0.16)";
           }
           // Ensure enlarged window does not overflow off right screen edge
           const rect = hud.getBoundingClientRect();
@@ -1525,7 +1526,7 @@ Respond ONLY with valid JSON:
             expandBtn.title = "Enlarge & Inspect Live Gemini AI Communication";
           }
           if (toggleRowBtn) {
-            toggleRowBtn.style.background = "#0c1524";
+            toggleRowBtn.style.background = "#14271d";
           }
         }
       }
@@ -1550,7 +1551,7 @@ Respond ONLY with valid JSON:
         autoScrollBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           autoScrollLogs = !autoScrollLogs;
-          autoScrollBtn.style.color = autoScrollLogs ? "#38bdf8" : "#8b9bb4";
+          autoScrollBtn.style.color = autoScrollLogs ? "#e5a952" : "#98b09f";
           autoScrollBtn.textContent = autoScrollLogs ? "↓ Auto" : "Paused";
         });
       }
