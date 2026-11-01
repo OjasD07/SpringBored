@@ -3,11 +3,11 @@
   <a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="./SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #244534; border-radius: 10px; padding: 4px; margin: 0 0 8px 8px; vertical-align: middle;" /></a>
 </p>
 
-# ⚡ SpringBored (Assignment Edition) v2.3
+# ⚡ SpringBored (Assessment Edition) v1.0.0
 
 > **Autonomous Quiz, Test & Multi-Section Assessment Solver for Infosys Springboard — powered by Google Gemini AI with dynamic model selection.**
 
-SpringBored Assignment Edition is a focused, high-precision Chrome Extension (Manifest V3) dedicated exclusively to attempting and solving quizzes, tests, and multi-section assessments (IAP) on Infosys Springboard (`infyspringboard.onwingspan.com`).
+SpringBored Assessment Edition is a focused, high-precision Chrome Extension (Manifest V3) dedicated exclusively to attempting and solving quizzes, tests, and multi-section assessments (IAP) on Infosys Springboard (`infyspringboard.onwingspan.com`).
 
 **Supports all subjects** — Computer Science, Management, Finance, General Knowledge, Science, and any other academic or professional domain.
 
@@ -47,7 +47,7 @@ SpringBored Assignment Edition is a focused, high-precision Chrome Extension (Ma
 2. Sign in with your Google account.
 3. Click **Create API Key**.
 4. Copy your API key (starts with `AIzaSy...`).
-5. Open the SpringBored Assignment extension popup, paste the key into the API key field, and click **Save & Test**.
+5. Open the SpringBored Assessment extension popup, paste the key into the API key field, and click **Save & test**.
 
 ---
 
@@ -58,7 +58,7 @@ SpringBored Assignment Edition is a focused, high-precision Chrome Extension (Ma
    chrome://extensions/
    ```
 2. Enable **Developer Mode** using the toggle in the top-right corner.
-3. Click **Load unpacked** and select the `SpringBored - Assignment` folder.
+3. Click **Load unpacked** and select the `SpringBored - Assessment` folder.
 4. Pin the **SpringBored** icon to your toolbar.
 
 ---

@@ -1,4 +1,4 @@
-// SpringBored (Assignment Edition) - Content Script v2.3.0
+// SpringBored (Assessment Edition) - Content Script v1.0.0
 // Autonomous Quiz, Test, and Multi-Section Assessment (IAP) Solver
 // Powered by Google Gemini AI.
 
@@ -34,7 +34,7 @@
   // ─── Logging & Utilities ──────────────────────────────────────────────────
   const log = (msg) =>
     console.log(
-      `%c[SpringBored Assignment] ${msg}`,
+      `%c[SpringBored Assessment] ${msg}`,
       "color:#38bdf8;font-weight:bold",
     );
 
@@ -3996,5 +3996,5 @@ Respond ONLY with valid JSON:
     }
   });
 
-  log("Assignment solver content script ready");
+  log("Assessment solver content script ready");
 })();

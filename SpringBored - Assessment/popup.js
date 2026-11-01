@@ -1,4 +1,4 @@
-// SpringBored (Assignment Edition) - Popup Script
+// SpringBored (Assessment Edition) - Popup Script
 // Controls Gemini AI Assessment Solver
 
 const btnStart          = document.getElementById('btnStart');

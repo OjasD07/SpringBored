@@ -12,7 +12,7 @@ SpringBored is split into two specialized, standalone extensions:
 | Edition | Folder | Description | AI Support |
 | :--- | :--- | :--- | :---: |
 | [**SpringBored**](./SpringBored) | `SpringBored/` | **Course Completer**: 16× video accelerator, auto-reading mark completed, confirmation dialog handler, and multi-module course tree navigator. Skips quizzes for manual review. | ❌ No | 
-| [**SpringBored Assignment**](./SpringBored%20-%20Assignment) | `SpringBored - Assignment/` | **Assessment & Quiz Solver**: Powered by **Google Gemini 3.8 Flash**. Autonomously attempts multi-section assessments (IAP) and quizzes, reads code snippets and options, auto-selects correct answers, saves, and submits tests. | ✅ Yes (Gemini - Free Tier Also Works) |
+| [**SpringBored Assessment**](./SpringBored%20-%20Assessment) | `SpringBored - Assessment/` | **Assessment & Quiz Solver**: Powered by **Google Gemini AI**. Autonomously attempts multi-section assessments (IAP) and quizzes, reads code snippets and options, auto-selects correct answers, saves, and submits tests. | ✅ Yes (Gemini - Free Tier Also Works) |
 
 ---
 
@@ -20,19 +20,19 @@ SpringBored is split into two specialized, standalone extensions:
 
 ### 1. Choose your edition
 - **Course Completer (Videos & Readings)**: Load the `SpringBored/` folder.
-- **Assessment Solver (Quizzes & Tests)**: Load the `SpringBored - Assignment/` folder and paste your free [Google Gemini API Key](https://aistudio.google.com/app/apikey) in settings.
+- **Assessment Solver (Quizzes & Tests)**: Load the `SpringBored - Assessment/` folder and paste your free [Google Gemini API Key](https://aistudio.google.com/app/apikey) in settings.
 
 ### 2. Install in Chrome
 1. Open Google Chrome and go to `chrome://extensions/`.
 2. Toggle **Developer mode** on (top-right corner).
-3. Click **Load unpacked** and select `SpringBored` or `SpringBored - Assignment`.
+3. Click **Load unpacked** and select `SpringBored` or `SpringBored - Assessment`.
 4. Pin the extension to your toolbar.
 
 ### 3. Usage
 - **For Course Completer (`SpringBored/`)**:
   1. Open any course player (`/viewer/`).
   2. Click the extension icon and press **Run course**.
-- **For Assessment Solver (`SpringBored - Assignment/`)**:
+- **For Assessment Solver (`SpringBored - Assessment/`)**:
   1. Open any quiz or assessment tab.
   2. Use the floating **SpringBored** panel in the corner, press **Alt + S**, or click **Solve assessment** in the extension popup.
 
@@ -51,7 +51,7 @@ SpringBored/
 │   ├── popup.js
 │   └── README.md
 │
-└── SpringBored - Assignment/    # Assignment Edition (Autonomous Gemini 3.8 Flash Quiz & Assessment Solver)
+└── SpringBored - Assessment/    # Assessment Edition (Autonomous Gemini AI Quiz & Assessment Solver)
     ├── manifest.json
     ├── background.js
     ├── content.js

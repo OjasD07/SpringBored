@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SpringBored",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "An automated, hands-free tool that navigates through Infosys Springboard courses and auto-completes all lessons.",
   "permissions": [
     "activeTab",
