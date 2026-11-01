@@ -888,6 +888,23 @@ Respond ONLY with valid JSON:
               <button class="sb-hud-tool-btn" id="sbHudCloseBtn" title="Close Widget">✕</button>
             </div>
           </div>
+          <div class="sb-hud-update-banner" id="sbHudUpdateBanner" style="display:none;">
+            <div class="sb-hud-update-left">
+              <span class="sb-hud-update-badge" id="sbHudUpdateBadge">NEW</span>
+              <span id="sbHudUpdateText">Update available</span>
+            </div>
+            <div class="sb-hud-update-right">
+              <a
+                class="sb-hud-update-link"
+                id="sbHudUpdateLink"
+                href="https://github.com/OjasD07/SpringBored/releases/latest"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Update &nearr;</a
+              >
+              <button class="sb-hud-update-dismiss" id="sbHudUpdateDismiss" type="button" title="Dismiss">&times;</button>
+            </div>
+          </div>
           <div class="sb-hud-content" id="sbHudContent">
             <div class="sb-hud-status-row">
               <span class="sb-hud-dot" id="sbHudDot"></span>
@@ -1438,9 +1455,116 @@ Respond ONLY with valid JSON:
           font-weight: 700;
           color: #f3ebd3 !important;
         }
+        .sb-hud-update-banner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 6px;
+          padding: 5px 8px;
+          background: linear-gradient(90deg, rgba(229, 169, 82, 0.22) 0%, rgba(230, 146, 109, 0.16) 100%);
+          border: 1px solid rgba(229, 169, 82, 0.48);
+          border-radius: 6px;
+          color: #f3ebd3;
+          font-size: 10px;
+        }
+        .sb-hud-update-left {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          min-width: 0;
+        }
+        .sb-hud-update-badge {
+          padding: 1px 5px;
+          border-radius: 3px;
+          background: #e5a952;
+          color: #162b21;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 8px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+        .sb-hud-update-right {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          flex-shrink: 0;
+        }
+        .sb-hud-update-link {
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: #e5a952;
+          color: #162b21 !important;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 8.5px;
+          font-weight: 700;
+          text-decoration: none !important;
+        }
+        .sb-hud-update-link:hover {
+          background: #f0be6e;
+        }
+        .sb-hud-update-dismiss {
+          padding: 0 2px;
+          border: 0;
+          background: none;
+          color: #98b09f;
+          font-size: 12px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .sb-hud-update-dismiss:hover {
+          color: #f3ebd3;
+        }
       `;
       (document.head || document.documentElement).appendChild(style);
       (document.body || document.documentElement).appendChild(hud);
+
+      // ── Sync Update Nudge Banner inside HUD ──
+      const hudUpdateBanner = document.getElementById("sbHudUpdateBanner");
+      const hudUpdateBadge = document.getElementById("sbHudUpdateBadge");
+      const hudUpdateText = document.getElementById("sbHudUpdateText");
+      const hudUpdateLink = document.getElementById("sbHudUpdateLink");
+      const hudUpdateDismiss = document.getElementById("sbHudUpdateDismiss");
+
+      function applyHudUpdateBanner(info, dismissedVer) {
+        if (!hudUpdateBanner) return;
+        if (info?.available && info.latestVersion && info.latestVersion !== dismissedVer) {
+          hudUpdateBanner.style.display = "flex";
+          if (hudUpdateBadge) hudUpdateBadge.textContent = `v${info.latestVersion}`;
+          if (hudUpdateText) hudUpdateText.textContent = `Update v${info.latestVersion} available`;
+          if (hudUpdateLink) {
+            hudUpdateLink.href = info.releaseUrl || "https://github.com/OjasD07/SpringBored/releases/latest";
+          }
+        } else {
+          hudUpdateBanner.style.display = "none";
+        }
+      }
+
+      try {
+        chrome.storage.local.get(["updateInfo", "dismissedUpdateVersion"], (d) => {
+          applyHudUpdateBanner(d?.updateInfo, d?.dismissedUpdateVersion);
+        });
+        chrome.runtime.sendMessage({ type: "CHECK_FOR_UPDATES", force: false }, (info) => {
+          void chrome.runtime.lastError;
+          if (info) {
+            chrome.storage.local.get(["dismissedUpdateVersion"], (d) => {
+              applyHudUpdateBanner(info, d?.dismissedUpdateVersion);
+            });
+          }
+        });
+      } catch (_) {}
+
+      if (hudUpdateDismiss) {
+        hudUpdateDismiss.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const ver = hudUpdateBadge?.textContent?.replace(/^v/i, "") || "";
+          if (hudUpdateBanner) hudUpdateBanner.style.display = "none";
+          if (ver) {
+            try {
+              chrome.storage.local.set({ dismissedUpdateVersion: ver });
+            } catch (_) {}
+          }
+        });
+      }
 
       const hudYear = document.getElementById("sbHudCopyrightYear");
       if (hudYear) hudYear.textContent = String(new Date().getFullYear());
