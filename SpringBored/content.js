@@ -766,7 +766,7 @@
       isRunning = false;
       emitTelemetry('course_completed', {
         courses: 1,
-        lectures: completed,
+        totalLecturesInCourse: completed,
         skipped
       });
       const msg = `Complete. ${completed} lesson(s) done, ${skipped} assignment(s) skipped.`;

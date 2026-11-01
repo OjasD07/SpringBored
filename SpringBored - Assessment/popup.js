@@ -226,7 +226,12 @@ function sanitizeApiKey(input) {
     return aizaMatch[0];
   }
 
-  cleaned = cleaned.trim().replace(/^['"`]+|['"`]+$/g, '').replace(/\s+/g, '');
+  cleaned = cleaned
+    .trim()
+    .replace(/^(?:export\s+)?[A-Za-z0-9_]*(?:KEY|TOKEN)[A-Za-z0-9_]*\s*[:=]\s*/i, '')
+    .trim()
+    .replace(/^['"`]+|['"`]+$/g, '')
+    .replace(/\s+/g, '');
 
   const wrappedAizaMatch = cleaned.match(/AIza[A-Za-z0-9_-]{20,}/);
   if (wrappedAizaMatch) {

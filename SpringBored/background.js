@@ -90,12 +90,11 @@ async function checkForExtensionUpdate(force = false) {
     // 1. Try SpringBored website version API
     try {
       const res = await fetch(VERSION_ENDPOINT, { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        latestVersion = String(data.courseVersion || data.latestVersion || currentVersion).replace(/^v/i, '');
-        releaseUrl = data.releaseUrl || GITHUB_RELEASES_URL;
-        notes = data.changelog || '';
-      }
+      if (!res.ok) throw new Error('Version API HTTP ' + res.status);
+      const data = await res.json();
+      latestVersion = String(data.courseVersion || data.latestVersion || currentVersion).replace(/^v/i, '');
+      releaseUrl = data.releaseUrl || GITHUB_RELEASES_URL;
+      notes = data.changelog || '';
     } catch (_) {
       // 2. Fallback directly to GitHub Releases API
       const ghRes = await fetch(GITHUB_RELEASE_API, {

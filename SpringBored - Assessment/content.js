@@ -50,7 +50,12 @@
     );
     const aizaMatch = cleaned.match(/AIza[A-Za-z0-9_-]{20,}/);
     if (aizaMatch) return aizaMatch[0];
-    cleaned = cleaned.trim().replace(/^['"`]+|['"`]+$/g, "").replace(/\s+/g, "");
+    cleaned = cleaned
+      .trim()
+      .replace(/^(?:export\s+)?[A-Za-z0-9_]*(?:KEY|TOKEN)[A-Za-z0-9_]*\s*[:=]\s*/i, "")
+      .trim()
+      .replace(/^['"`]+|['"`]+$/g, "")
+      .replace(/\s+/g, "");
     const wrappedMatch = cleaned.match(/AIza[A-Za-z0-9_-]{20,}/);
     if (wrappedMatch) return wrappedMatch[0];
     return cleaned;
@@ -2468,12 +2473,12 @@ Respond ONLY with valid JSON:
   function cleanLeadingOptionEnumerator(text) {
     if (!text) return '';
     let cleaned = text.trim();
-    // Strip only explicit option prefixes like "(A) " or "A) " or "Option A: "
+    // Strip only explicit option prefixes like "(A) ", "A) ", "A. ", or "Option A: "
     // Never strip "A - B", "a.property", or "(a) =>"
     const stripped = cleaned
       .replace(/^(?:Option\s+[A-Za-z0-9]+[\.\)\:]\s+)/i, '')
-      .replace(/^\([A-Da-d1-9]\)\s+(?![=+\-*/&|<>])/, '')
-      .replace(/^[A-Da-d]\)\s+(?![=+\-*/&|<>])/, '')
+      .replace(/^\([A-Da-d1-9]\)\s+(?!=)/, '')
+      .replace(/^[A-Da-d][\)\.]\s+(?!=)/, '')
       .trim();
     return stripped || cleaned;
   }
@@ -3413,7 +3418,7 @@ Respond ONLY with valid JSON:
       emitTelemetry("assessment_completed", {
         assessments: 1,
         sections: sectionCount || 1,
-        questions: totalQuestionsAnswered,
+        totalQuestionsInAssessment: totalQuestionsAnswered,
       });
       sendStatus({
         status: "done",

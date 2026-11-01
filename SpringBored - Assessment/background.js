@@ -90,12 +90,11 @@ async function checkForExtensionUpdate(force = false) {
 
     try {
       const res = await fetch(VERSION_ENDPOINT, { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        latestVersion = String(data.assessmentVersion || data.latestVersion || currentVersion).replace(/^v/i, '');
-        releaseUrl = data.releaseUrl || GITHUB_RELEASES_URL;
-        notes = data.changelog || '';
-      }
+      if (!res.ok) throw new Error('Version API HTTP ' + res.status);
+      const data = await res.json();
+      latestVersion = String(data.assessmentVersion || data.latestVersion || currentVersion).replace(/^v/i, '');
+      releaseUrl = data.releaseUrl || GITHUB_RELEASES_URL;
+      notes = data.changelog || '';
     } catch (_) {
       const ghRes = await fetch(GITHUB_RELEASE_API, {
         headers: { Accept: 'application/vnd.github+json' },
@@ -360,8 +359,14 @@ function sanitizeApiKey(input) {
     return aizaMatch[0];
   }
 
+  // Strip .env key assignment prefix (e.g. GEMINI_API_KEY="...", export API_KEY='...')
+  cleaned = cleaned
+    .trim()
+    .replace(/^(?:export\s+)?[A-Za-z0-9_]*(?:KEY|TOKEN)[A-Za-z0-9_]*\s*[:=]\s*/i, '')
+    .trim();
+
   // Strip surrounding quotes and any internal/external whitespace (handles line-wrapped keys)
-  cleaned = cleaned.trim().replace(/^['"`]+|['"`]+$/g, '').replace(/\s+/g, '');
+  cleaned = cleaned.replace(/^['"`]+|['"`]+$/g, '').replace(/\s+/g, '');
 
   const wrappedAizaMatch = cleaned.match(/AIza[A-Za-z0-9_-]{20,}/);
   if (wrappedAizaMatch) {
@@ -722,7 +727,7 @@ function sanitizeForPrompt(text, maxLen) {
   // Strip control characters except newline/tab and neutralize prompt-boundary delimiters
   let clean = text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .replace(/={3,}\s*(?:END|BEGIN|COMPLETE|ALL OPTIONS|ASSESSMENT)/gi, '---')
+    .replace(/={3,}\s*(?:END|BEGIN|COMPLETE|QUESTION|OPTIONS|ALL OPTIONS|ASSESSMENT|SYSTEM|INSTRUCTION)/gi, '---')
     .replace(/\b(?:MANDATORY SOLVING PROTOCOL|CRITICAL RULES)\s*:/gi, '');
   // Truncate to maximum length
   if (clean.length > maxLen) {
