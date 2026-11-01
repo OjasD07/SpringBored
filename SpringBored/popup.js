@@ -225,7 +225,8 @@ clearLogBtn.addEventListener('click', () => {
 });
 
 // ── Listen for status updates from content script ─────────────────────────────
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (sender?.id && sender.id !== chrome.runtime.id) return;
   if (msg.type !== 'STATUS_UPDATE') return;
 
   const { status, message, completed = 0, total = 0, skipped = 0 } = msg;

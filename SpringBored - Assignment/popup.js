@@ -259,7 +259,7 @@ async function validateKeyDirectlyInPopup(cleanKey, targetModel) {
 
   for (const ver of ['v1beta', 'v1']) {
     try {
-      const url = `https://generativelanguage.googleapis.com/${ver}/models?key=${encodeURIComponent(cleanKey)}`;
+      const url = `https://generativelanguage.googleapis.com/${ver}/models`;
       const res = await fetch(url, {
         headers: { 'x-goog-api-key': cleanKey }
       });
@@ -572,7 +572,8 @@ if (clearLogBtn) {
 }
 
 // ── Listen for status updates from content scripts ───────────────────────────
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (sender?.id && sender.id !== chrome.runtime.id) return;
   if (msg.type === 'STATUS_UPDATE') {
     const displayState = msg.status === 'stopped' ? 'idle' : msg.status;
 

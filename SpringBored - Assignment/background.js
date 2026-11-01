@@ -39,6 +39,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 // Relay messages & handle Gemini AI actions
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender?.id && sender.id !== chrome.runtime.id) {
+    return false;
+  }
+
   if (message.type === 'STATUS_UPDATE') {
     if (sender.tab?.id !== undefined) {
       tabStatuses.set(sender.tab.id, {
@@ -250,11 +254,10 @@ function formatGoogleKeyError(errData, fallbackMessage) {
   return fallbackMessage || 'Failed to validate key with Gemini API';
 }
 
-// ── Gemini API request helper ──────────────────────────────────────────────
+// ── SECURITY: Gemini API request helper (key strictly in header, never in URL) ──
 async function geminiApiFetch(endpoint, apiKey, options = {}, apiVersion = 'v1beta') {
   const cleanKey = sanitizeApiKey(apiKey);
-  const sep = endpoint.includes('?') ? '&' : '?';
-  const url = `https://generativelanguage.googleapis.com/${apiVersion}${endpoint}${sep}key=${encodeURIComponent(cleanKey)}`;
+  const url = `https://generativelanguage.googleapis.com/${apiVersion}${endpoint}`;
   const headers = {
     'x-goog-api-key': cleanKey,
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -559,8 +562,11 @@ const MAX_OPTION_LENGTH = 6000;
 
 function sanitizeForPrompt(text, maxLen) {
   if (!text || typeof text !== 'string') return '';
-  // Strip control characters except newline/tab
-  let clean = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  // Strip control characters except newline/tab and neutralize prompt-boundary delimiters
+  let clean = text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/={3,}\s*(?:END|BEGIN|COMPLETE|ALL OPTIONS|ASSESSMENT)/gi, '---')
+    .replace(/\b(?:MANDATORY SOLVING PROTOCOL|CRITICAL RULES)\s*:/gi, '');
   // Truncate to maximum length
   if (clean.length > maxLen) {
     clean = clean.slice(0, maxLen) + '… [truncated]';
@@ -593,12 +599,14 @@ function matchOptionTextToIndex(candidateText, options) {
   }
   if (exactMatches.length === 1) return exactMatches[0];
 
-  // 2. Unambiguous substring match
+  // 2. Unambiguous substring match (require optNorm >= 12 chars before allowing target.includes(optNorm)
+  //    so short options like "O(n)" never substring-match "O(n log n)")
   if (target.length >= 4) {
     const subMatches = [];
     for (let i = 0; i < options.length; i++) {
       const optNorm = normalize(options[i]);
-      if (optNorm && (optNorm.includes(target) || target.includes(optNorm))) {
+      if (!optNorm) continue;
+      if (optNorm.includes(target) || (optNorm.length >= 12 && target.includes(optNorm))) {
         subMatches.push(i);
       }
     }
@@ -625,20 +633,28 @@ function convertChoiceToIndex(val, options) {
       return (num >= 0 && num < options.length) ? num : null;
     }
 
-    // 2. "Index 0" or "Option B" or "(B)"
+    // 2. "Index 0"
     const idxMatch = trimmed.match(/^Index\s+(\d+)\b/i);
     if (idxMatch) {
       const num = parseInt(idxMatch[1], 10);
       return (num >= 0 && num < options.length) ? num : null;
     }
 
-    const letterMatch = trimmed.match(/^(?:option\s*)?\(?([A-Za-z])\)?[\.\:\s]*$/i);
+    // 3. If options themselves are single-character strings, check exact option match before letter A-D
+    const hasSingleCharOption = options.some(o => String(o || '').trim().length === 1);
+    if (hasSingleCharOption) {
+      const exactIdx = options.findIndex(o => String(o || '').trim().toLowerCase() === trimmed.toLowerCase());
+      if (exactIdx !== -1) return exactIdx;
+    }
+
+    // 4. Letter choice e.g. "A", "B", "C", "D" or "(B)" or "Option B"
+    const letterMatch = trimmed.match(/^(?:option\s*)?\(?([A-Ha-h])\)?[\.\:\s]*$/i);
     if (letterMatch) {
       const idx = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
       return (idx >= 0 && idx < options.length) ? idx : null;
     }
 
-    // 3. Exact or unambiguous substring match against option texts
+    // 5. Exact or unambiguous substring match against option texts
     const textIdx = matchOptionTextToIndex(trimmed, options);
     if (textIdx !== null) return textIdx;
   }

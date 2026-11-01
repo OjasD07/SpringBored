@@ -394,7 +394,12 @@
         }
       }
 
-      const video = document.querySelector('video');
+      const allVideos = [...document.querySelectorAll('video')];
+      const video =
+        allVideos.find(v => v.readyState >= 2 && Number.isFinite(v.duration) && v.duration > 0) ||
+        allVideos.find(v => v.offsetWidth > 0 && v.offsetHeight > 0) ||
+        allVideos[0] ||
+        null;
 
       if (video && video.readyState >= 2 && Number.isFinite(video.duration) && video.duration > 0) {
         // A previous lesson's ended video can still be mounted briefly. Give the
@@ -743,6 +748,9 @@
 
   // ─── Message listener ─────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (_sender?.id && _sender.id !== chrome.runtime.id) {
+      return false;
+    }
     switch (msg.action) {
       case 'START':
         if (!isRunning) runAutomation();

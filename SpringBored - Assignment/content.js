@@ -101,7 +101,8 @@
       const sub = [];
       for (let i = 0; i < options.length; i++) {
         const optNorm = normalize(options[i]);
-        if (optNorm && (optNorm.includes(target) || target.includes(optNorm))) {
+        if (!optNorm) continue;
+        if (optNorm.includes(target) || (optNorm.length >= 12 && target.includes(optNorm))) {
           sub.push(i);
         }
       }
@@ -126,7 +127,14 @@
         const num = parseInt(idxMatch[1], 10);
         return num >= 0 && num < options.length ? num : null;
       }
-      const letterMatch = trimmed.match(/^(?:option\s*)?\(?([A-Za-z])\)?[\.\:\s]*$/i);
+      const hasSingleCharOption = options.some((o) => String(o || "").trim().length === 1);
+      if (hasSingleCharOption) {
+        const exactIdx = options.findIndex(
+          (o) => String(o || "").trim().toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (exactIdx !== -1) return exactIdx;
+      }
+      const letterMatch = trimmed.match(/^(?:option\s*)?\(?([A-Ha-h])\)?[\.\:\s]*$/i);
       if (letterMatch) {
         const idx = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
         return idx >= 0 && idx < options.length ? idx : null;
@@ -261,7 +269,7 @@ MANDATORY SOLVING PROTOCOL:
       for (let i = 0; i < fallbackChain.length; i++) {
         const model = fallbackChain[i];
         try {
-          const baseUrl = `https://generativelanguage.googleapis.com/${apiVer}/models/${model}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+          const baseUrl = `https://generativelanguage.googleapis.com/${apiVer}/models/${model}:generateContent`;
           let res = await fetch(baseUrl, {
             method: "POST",
             headers: {
@@ -318,7 +326,7 @@ MANDATORY SOLVING PROTOCOL:
               discoveredDynamic = true;
               try {
                 const mRes = await fetch(
-                  `https://generativelanguage.googleapis.com/${apiVer}/models?key=${encodeURIComponent(cleanKey)}`,
+                  `https://generativelanguage.googleapis.com/${apiVer}/models`,
                   { headers: { "x-goog-api-key": cleanKey } },
                 );
                 if (mRes.ok) {
@@ -755,12 +763,12 @@ Respond ONLY with valid JSON:
     card.innerHTML = `
       <div class="sb-hud-card-top">
         <div class="sb-hud-card-qinfo">
-          <span class="sb-hud-card-qbadge">Question #${qNum}</span>
-          <span class="sb-hud-card-time">${entry.timestamp || ""}</span>
+          <span class="sb-hud-card-qbadge">Question #${escapeHtml(qNum)}</span>
+          <span class="sb-hud-card-time">${escapeHtml(entry.timestamp || "")}</span>
         </div>
         <div class="sb-hud-card-perf">
-          <span class="sb-hud-card-latency">${entry.latencyMs || 0} ms</span>
-          <span class="sb-hud-card-model">${formatModelName(entry.model || "Gemini")}</span>
+          <span class="sb-hud-card-latency">${escapeHtml(entry.latencyMs || 0)} ms</span>
+          <span class="sb-hud-card-model">${escapeHtml(formatModelName(entry.model || "Gemini"))}</span>
         </div>
       </div>
 
@@ -841,7 +849,10 @@ Respond ONLY with valid JSON:
     let hud = document.getElementById("springbored-assignment-hud");
     if (!hud) {
       const fallbackLogoUrl =
-        "https://raw.githubusercontent.com/OjasD07/SpringBored/main/SpringBored/Assets/Logo.png";
+        "data:image/svg+xml;utf8," +
+        encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><rect width="44" height="44" rx="10" fill="#070d17"/><circle cx="22" cy="22" r="13" fill="none" stroke="#38bdf8" stroke-width="3.5"/><path d="M19 15l10 7-10 7V15z" fill="#fb923c"/></svg>',
+        );
       let hudLogoUrl = fallbackLogoUrl;
       try {
         if (chrome?.runtime?.getURL) {
@@ -1904,18 +1915,16 @@ Respond ONLY with valid JSON:
           .toLowerCase();
 
         if (
-          aria.includes("back") ||
-          aria.includes("section") ||
-          cls.includes("back") ||
+          aria.includes("back to section") ||
+          aria === "back" ||
+          cls.includes("back-btn") ||
           cls.includes("arrow-left") ||
           text === "arrow_back" ||
-          text === "chevron_left" ||
-          text === "←" ||
-          text === "<"
+          text === "←"
         ) {
           const target = el.closest('button, a, [role="button"]') || el;
           const rect = target.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0 && rect.left < 200) {
+          if (rect.width > 0 && rect.height > 0 && rect.left < 200 && rect.top < 170) {
             return target;
           }
         }
@@ -1937,13 +1946,12 @@ Respond ONLY with valid JSON:
   function isElementRendered(el) {
     if (!el) return false;
     try {
-      // Check the element and its ancestors. Angular keeps inactive question
-      // panels mounted; relying on the element's own style alone can scrape a
-      // question that is not on screen.
+      const win = el.ownerDocument?.defaultView || window;
+      const docEl = el.ownerDocument?.documentElement || document.documentElement;
       let node = el;
       let depth = 0;
       while (node && node.nodeType === 1 && depth < 14) {
-        const style = window.getComputedStyle(node);
+        const style = win.getComputedStyle(node);
         if (
           style.display === "none" ||
           style.visibility === "hidden" ||
@@ -1960,10 +1968,9 @@ Respond ONLY with valid JSON:
 
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) return false;
-      // Do not restrict by window.innerHeight: long questions/options scroll down below viewport height
       return (
         rect.right > 0 &&
-        rect.left < (window.innerWidth || document.documentElement.clientWidth)
+        rect.left < (win.innerWidth || docEl.clientWidth || 1920)
       );
     } catch (_) {
       return false;
@@ -2455,11 +2462,11 @@ Respond ONLY with valid JSON:
     if (!text) return '';
     let cleaned = text.trim();
     // Strip only explicit option prefixes like "(A) " or "A) " or "Option A: "
-    // Never strip "A - B" or "a.property"
+    // Never strip "A - B", "a.property", or "(a) =>"
     const stripped = cleaned
       .replace(/^(?:Option\s+[A-Za-z0-9]+[\.\)\:]\s+)/i, '')
-      .replace(/^\([A-Da-d1-9]\)\s+/, '')
-      .replace(/^[A-Da-d]\)\s+/, '')
+      .replace(/^\([A-Da-d1-9]\)\s+(?![=+\-*/&|<>])/, '')
+      .replace(/^[A-Da-d]\)\s+(?![=+\-*/&|<>])/, '')
       .trim();
     return stripped || cleaned;
   }
@@ -2771,7 +2778,15 @@ Respond ONLY with valid JSON:
         const paletteInParent = parent.querySelectorAll(
           '.palette-circle, .question-palette, .q-num, .circle'
         );
-        if (paletteInParent.length >= 3) {
+        if (paletteInParent.length >= 3 || getAvailablePaletteCircles([parent]).length >= 2) {
+          questionCard = cur;
+          break;
+        }
+
+        // Also stop if `cur` is the right-hand question column and `parent` spans across the left sidebar
+        const curRect = cur.getBoundingClientRect?.() || { left: 0 };
+        const parentRect = parent.getBoundingClientRect?.() || { left: 0 };
+        if (curRect.left > 140 && parentRect.left < 60) {
           questionCard = cur;
           break;
         }
@@ -3804,12 +3819,24 @@ Respond ONLY with valid JSON:
           clickElementThoroughly(saveBtn);
           await sleep(600);
           if (hasEnterResponseToast()) {
-            for (const idx of selectedIndices) {
-              if (qData.options[idx]) selectOption(qData.options[idx]);
-            }
+            await ensureOptionsSelected(qData.options, selectedIndices);
             clickElementThoroughly(saveBtn);
             await sleep(600);
           }
+        }
+
+        // If Save did not auto-advance, look for a separate Next button
+        const nextBtns = [
+          ...qData.rootDocument.querySelectorAll(
+            'button, [role="button"], input[type="button"], a',
+          ),
+        ].filter((b) => {
+          if (b === saveBtn || b.disabled || b.hasAttribute("disabled")) return false;
+          const t = (b.innerText || b.textContent || b.value || "").trim().toLowerCase();
+          return t === "next" || t === "next question" || t === "save & next";
+        });
+        if (nextBtns.length > 0) {
+          clickElementThoroughly(nextBtns[0]);
         }
 
         answeredSet.add(effectiveQNum);
@@ -3914,6 +3941,9 @@ Respond ONLY with valid JSON:
   setTimeout(maybeMountHud, 4500);
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (_sender?.id && _sender.id !== chrome.runtime.id) {
+      return false;
+    }
     switch (msg.action) {
       case "START":
       case "START_ASSESSMENT_SOLVER":
