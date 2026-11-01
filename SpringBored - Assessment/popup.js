@@ -574,6 +574,10 @@ if (clearLogBtn) {
 // ── Listen for status updates from content scripts ───────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (sender?.id && sender.id !== chrome.runtime.id) return;
+  if (msg.type === 'PERSONAL_STATS_UPDATED' && msg.stats) {
+    renderPersonalStats(msg.stats);
+    return;
+  }
   if (msg.type === 'STATUS_UPDATE') {
     const displayState = msg.status === 'stopped' ? 'idle' : msg.status;
 
@@ -655,3 +659,91 @@ async function checkActivePage() {
 }
 
 checkActivePage();
+
+// ── Personal Impact Stats & GitHub Releases Update Checker ──────────────────
+const updateBanner       = document.getElementById('updateBanner');
+const updateVersionBadge = document.getElementById('updateVersionBadge');
+const updateBannerMsg    = document.getElementById('updateBannerMsg');
+const updateDownloadLink = document.getElementById('updateDownloadLink');
+const btnDismissUpdate   = document.getElementById('btnDismissUpdate');
+const btnCheckUpdate     = document.getElementById('btnCheckUpdate');
+const currentVerLabel    = document.getElementById('currentVersionLabel');
+const statTimeSaved      = document.getElementById('statTimeSaved');
+const statQuestions      = document.getElementById('statQuestions');
+const statAssessments    = document.getElementById('statAssessments');
+
+function formatDurationSaved(seconds) {
+  const s = Math.max(0, Number(seconds) || 0);
+  if (s < 60) return `${Math.round(s)}s`;
+  const mins = s / 60;
+  if (mins < 60) return `${Math.round(mins)}m`;
+  return `${(mins / 60).toFixed(1)}h`;
+}
+
+function renderPersonalStats(stats = {}) {
+  if (statTimeSaved) statTimeSaved.textContent = formatDurationSaved(stats.savedSeconds || 0);
+  if (statQuestions) statQuestions.textContent = String(stats.questionsSolved || 0);
+  if (statAssessments) statAssessments.textContent = String(stats.assessmentsCompleted || 0);
+}
+
+function renderUpdateBanner(info, dismissedVersion) {
+  if (!updateBanner) return;
+  if (info?.available && info.latestVersion && info.latestVersion !== dismissedVersion) {
+    updateBanner.hidden = false;
+    if (updateVersionBadge) updateVersionBadge.textContent = `v${info.latestVersion}`;
+    if (updateBannerMsg) updateBannerMsg.textContent = `Update v${info.latestVersion} available`;
+    if (updateDownloadLink) {
+      updateDownloadLink.href = info.releaseUrl || 'https://github.com/OjasD07/SpringBored/releases/latest';
+    }
+  } else {
+    updateBanner.hidden = true;
+  }
+}
+
+if (currentVerLabel && chrome.runtime?.getManifest) {
+  currentVerLabel.textContent = `v${chrome.runtime.getManifest().version || '1.0.0'}`;
+}
+
+chrome.storage.local.get(['personalStats', 'updateInfo', 'dismissedUpdateVersion'], (data) => {
+  renderPersonalStats(data.personalStats || {});
+  renderUpdateBanner(data.updateInfo, data.dismissedUpdateVersion);
+});
+
+chrome.runtime.sendMessage({ type: 'CHECK_FOR_UPDATES', force: false }, (info) => {
+  void chrome.runtime.lastError;
+  if (info) {
+    chrome.storage.local.get(['dismissedUpdateVersion'], (d) => {
+      renderUpdateBanner(info, d.dismissedUpdateVersion);
+    });
+  }
+});
+
+if (btnDismissUpdate) {
+  btnDismissUpdate.addEventListener('click', () => {
+    const ver = updateVersionBadge?.textContent?.replace(/^v/i, '') || '';
+    if (updateBanner) updateBanner.hidden = true;
+    if (ver) chrome.storage.local.set({ dismissedUpdateVersion: ver });
+  });
+}
+
+if (btnCheckUpdate) {
+  btnCheckUpdate.addEventListener('click', () => {
+    btnCheckUpdate.textContent = 'Checking…';
+    chrome.runtime.sendMessage({ type: 'CHECK_FOR_UPDATES', force: true }, (info) => {
+      void chrome.runtime.lastError;
+      if (info?.available) {
+        chrome.storage.local.remove(['dismissedUpdateVersion']);
+        renderUpdateBanner(info, null);
+        btnCheckUpdate.textContent = `v${info.latestVersion} available!`;
+        addLog(`Update v${info.latestVersion} available on GitHub Releases`, 'done');
+      } else {
+        const cur = chrome.runtime.getManifest?.()?.version || '1.0.0';
+        btnCheckUpdate.textContent = `Up to date (v${cur})`;
+        addLog(`Extension is up to date (v${cur})`, 'done');
+        setTimeout(() => {
+          btnCheckUpdate.textContent = 'Check updates';
+        }, 3000);
+      }
+    });
+  });
+}

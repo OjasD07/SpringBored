@@ -18,6 +18,13 @@
   // Keep the last progress numbers so pause/resume/stop updates do not make the
   // popup hide its progress panel.
   let lastProgress = { completed: 0, total: 0, skipped: 0 };
+  let lastVideoDurationSec = 0;
+
+  function emitTelemetry(event, metrics = {}) {
+    chrome.runtime
+      .sendMessage({ type: 'TELEMETRY_EVENT', event, metrics })
+      .catch(() => {});
+  }
 
   // ─── Utils ────────────────────────────────────────────────────────────────
   const log = (msg) => console.log(`%c[SpringBored] ${msg}`, 'color:#e4601e;font-weight:bold');
@@ -125,6 +132,7 @@
         if (!isRunning || isPaused) break;
         const toggle = folder.querySelector('mat-icon.toc-expand-icon, button') || folder;
         toggle.click();
+        emitTelemetry('module_completed', { modules: 1 });
         await sleep(350);
       }
       await sleep(500);
@@ -410,6 +418,7 @@
         }
 
         const dur = video.duration;
+        lastVideoDurationSec = Math.round(dur);
         log(`Video ready. Duration=${dur.toFixed(1)}s`);
 
         video.muted = true;
@@ -716,6 +725,8 @@
       if (isPaused) continue;
 
       // Handle video / text / web-module / mark-as-complete
+      lastVideoDurationSec = 0;
+      const lessonStartMs = Date.now();
       const outcome = await handleContent(lesson);
 
       if (outcome === 'stopped') break;
@@ -727,6 +738,19 @@
       // Click Next to confirm completion
       await clickNextButton();
       if (!isRunning) break;
+
+      const useTimeSeconds = Math.max(1, Math.round((Date.now() - lessonStartMs) / 1000));
+      const isVideoLesson = outcome === 'video_done' || outcome === 'video_timeout' || lastVideoDurationSec > 0;
+      const savedSeconds = isVideoLesson
+        ? Math.max(30, lastVideoDurationSec - useTimeSeconds)
+        : 180;
+
+      emitTelemetry('lecture_completed', {
+        lectures: 1,
+        contentType: isVideoLesson ? 'video' : 'reading',
+        savedSeconds,
+        useTimeSeconds
+      });
 
       processed.add(key);
       completed++;
@@ -740,6 +764,11 @@
     // ran out of lessons on its own.
     if (isRunning) {
       isRunning = false;
+      emitTelemetry('course_completed', {
+        courses: 1,
+        lectures: completed,
+        skipped
+      });
       const msg = `Complete. ${completed} lesson(s) done, ${skipped} assignment(s) skipped.`;
       log(msg);
       sendStatus({ status: 'done', message: msg, completed, total: Math.max(lessons.length, processed.size), skipped });

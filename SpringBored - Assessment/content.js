@@ -661,6 +661,12 @@ Respond ONLY with valid JSON:
   // the popup hide its progress panel.
   let lastProgress = { completed: 0, total: 0 };
 
+  function emitTelemetry(event, metrics = {}) {
+    chrome.runtime
+      .sendMessage({ type: "TELEMETRY_EVENT", event, metrics })
+      .catch(() => {});
+  }
+
   function sendStatus(data) {
     if (Number.isFinite(data.total) && data.total > 0) {
       lastProgress = {
@@ -3404,6 +3410,11 @@ Respond ONLY with valid JSON:
 
       const finalMsg = `Assessment complete. Solved ${totalQuestionsAnswered} questions across ${sectionCount || 1} section(s).`;
       log(finalMsg);
+      emitTelemetry("assessment_completed", {
+        assessments: 1,
+        sections: sectionCount || 1,
+        questions: totalQuestionsAnswered,
+      });
       sendStatus({
         status: "done",
         message: finalMsg,
@@ -3674,6 +3685,13 @@ Respond ONLY with valid JSON:
 
         answeredSet.add(qNum);
         questionsSolvedCount++;
+        emitTelemetry("question_solved", {
+          questions: 1,
+          savedSeconds: 90,
+          useTimeSeconds: Math.max(1, Math.round(latencyMs / 1000) + 2),
+          model: answerRes?.model || activeAnsweringModel || "gemini-2.5-flash",
+          latencyMs,
+        });
 
         // Wait up to 2 seconds for circle to show answered/green
         for (let gw = 0; gw < 5; gw++) {
@@ -3843,6 +3861,13 @@ Respond ONLY with valid JSON:
         answeredSet.add(effectiveQNum);
         lastHandledSig = qSig;
         questionsSolvedCount++;
+        emitTelemetry("question_solved", {
+          questions: 1,
+          savedSeconds: 90,
+          useTimeSeconds: Math.max(1, Math.round(seqLatencyMs / 1000) + 2),
+          model: answerRes?.model || activeAnsweringModel || "gemini-2.5-flash",
+          latencyMs: seqLatencyMs,
+        });
 
         const changed = await waitForQuestionChange(effectiveQNum, qSig, 3500);
         if (!changed) break;

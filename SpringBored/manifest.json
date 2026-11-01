@@ -11,7 +11,9 @@
   ],
   "host_permissions": [
     "https://*.onwingspan.com/*",
-    "https://*.springboard.infosys.com/*"
+    "https://*.springboard.infosys.com/*",
+    "https://springbored.ojasdeshpande.in/*",
+    "https://api.github.com/*"
   ],
   "background": {
     "service_worker": "background.js"

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self'; img-src 'self';"
+      content="default-src 'self'; style-src 'self'; img-src 'self'; connect-src https://springbored.ojasdeshpande.in https://api.github.com;"
     />
     <title>SpringBored — Course Runner</title>
     <link rel="stylesheet" href="popup.css" />
@@ -30,6 +30,31 @@
           <span id="statusState">Idle</span>
         </div>
       </header>
+
+      <div class="update-banner" id="updateBanner" hidden>
+        <div class="update-banner-text">
+          <span class="update-badge" id="updateVersionBadge">NEW</span>
+          <span id="updateBannerMsg">New release available on GitHub</span>
+        </div>
+        <div class="update-banner-actions">
+          <a
+            class="update-download-link"
+            id="updateDownloadLink"
+            href="https://github.com/OjasD07/SpringBored/releases/latest"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Update &nearr;</a
+          >
+          <button
+            class="update-dismiss-btn"
+            id="btnDismissUpdate"
+            type="button"
+            title="Dismiss update notice"
+          >
+            &times;
+          </button>
+        </div>
+      </div>
 
       <!-- First-run notice -->
       <main class="consent-view" id="noticeModal" hidden>
@@ -229,6 +254,14 @@
             <div class="log-entry idle">Ready. Open a course player tab.</div>
           </div>
         </section>
+
+        <div class="personal-stats-bar" id="personalStatsBar">
+          <span>Saved <strong id="statTimeSaved">0m</strong></span>
+          <span class="stats-sep">&middot;</span>
+          <span><strong id="statLectures">0</strong> lectures</span>
+          <span class="stats-sep">&middot;</span>
+          <span><strong id="statCourses">0</strong> courses</span>
+        </div>
       </main>
 
       <footer class="site-footer">
@@ -249,13 +282,25 @@
             >Ojas Shailesh Deshpande</a
           >
         </p>
-        <button
-          class="link-btn footer-privacy"
-          id="btnOpenNotice"
-          type="button"
-        >
-          Privacy &amp; terms
-        </button>
+        <div class="footer-links-row">
+          <span class="footer-ver" id="currentVersionLabel">v1.0.0</span>
+          <span class="stats-sep">&middot;</span>
+          <button
+            class="link-btn footer-privacy"
+            id="btnCheckUpdate"
+            type="button"
+          >
+            Check updates
+          </button>
+          <span class="stats-sep">&middot;</span>
+          <button
+            class="link-btn footer-privacy"
+            id="btnOpenNotice"
+            type="button"
+          >
+            Privacy &amp; terms
+          </button>
+        </div>
       </footer>
     </div>
 

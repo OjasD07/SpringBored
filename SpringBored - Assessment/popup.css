@@ -962,6 +962,115 @@ body {
   border-bottom-color: rgba(229, 169, 82, 0.45);
 }
 
+.footer-links-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.footer-ver {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.4px;
+}
+
+.stats-sep {
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+/* ── Update Nudge Banner & Personal Stats Strip ──────────────────────────── */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 14px;
+  background: linear-gradient(90deg, rgba(229, 169, 82, 0.2) 0%, rgba(230, 146, 109, 0.16) 100%);
+  border-bottom: 1px solid rgba(229, 169, 82, 0.45);
+  color: var(--text-primary);
+  font-size: 10.5px;
+}
+
+.update-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.update-badge {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--sky);
+  color: #162b21;
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  flex-shrink: 0;
+}
+
+.update-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.update-download-link {
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--sky);
+  color: #162b21;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.update-download-link:hover {
+  background: #ecc071;
+}
+
+.update-dismiss-btn {
+  padding: 0 3px;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.update-dismiss-btn:hover {
+  color: var(--text-primary);
+}
+
+.personal-stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.personal-stats-bar strong {
+  color: var(--sky);
+  font-weight: 700;
+}
+
 /* ── Gemini Engine Configuration Card (Assessment Edition) ────────────────── */
 
 .engine-panel {
