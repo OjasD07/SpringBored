@@ -1,4 +1,7 @@
-<a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Logo" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 0 8px 8px;" /></a>
+<p align="left">
+  <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 8px 8px 0; vertical-align: middle;" /></a>
+  <a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/SpringBored/main/SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #070d17; border-radius: 10px; padding: 4px; margin: 0 0 8px 8px; vertical-align: middle;" /></a>
+</p>
 
 # ⚡ SpringBored
 
@@ -8,7 +11,7 @@ SpringBored is split into two specialized, standalone extensions:
 
 | Edition | Folder | Description | AI Support |
 | :--- | :--- | :--- | :---: |
-| [**SpringBored**](./SpringBored) | `SpringBored/` | **Course Completer**: 16× video accelerator, auto-reading mark completed, confirmation dialog handler, and multi-module course tree navigator. Skips quizzes for manual review. | ❌ No |
+| [**SpringBored**](./SpringBored) | `SpringBored/` | **Course Completer**: 16× video accelerator, auto-reading mark completed, confirmation dialog handler, and multi-module course tree navigator. Skips quizzes for manual review. | ❌ No | 
 | [**SpringBored Assignment**](./SpringBored%20-%20Assignment) | `SpringBored - Assignment/` | **Assessment & Quiz Solver**: Powered by **Google Gemini 3.8 Flash**. Autonomously attempts multi-section assessments (IAP) and quizzes, reads code snippets and options, auto-selects correct answers, saves, and submits tests. | ✅ Yes (Gemini 3.8 Flash) |
 
 ---
@@ -28,10 +31,10 @@ SpringBored is split into two specialized, standalone extensions:
 ### 3. Usage
 - **For Course Completer (`SpringBored/`)**:
   1. Open any course player (`/viewer/`).
-  2. Click the extension icon and press **Start**.
+  2. Click the extension icon and press **Run course**.
 - **For Assessment Solver (`SpringBored - Assignment/`)**:
   1. Open any quiz or assessment tab.
-  2. Use the floating purple **SpringBored AI** HUD in the top-right corner, press **Alt + S**, or click **Solve Assessment Now** in the extension popup.
+  2. Use the floating **SpringBored** panel in the corner, press **Alt + S**, or click **Solve assessment** in the extension popup.
 
 ---
 

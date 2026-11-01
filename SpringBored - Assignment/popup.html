@@ -1,237 +1,344 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src https://generativelanguage.googleapis.com;" />
-  <title>SpringBored (Assignment Edition)</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="popup.css" />
-</head>
-<body>
-
-  <!-- Security, Privacy & Moral Notice View -->
-  <div class="consent-view" id="noticeModal" style="display:none;">
-    <div class="modal-card">
-      <div class="modal-header">
-        <div class="modal-icon-badge">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-        </div>
-        <div class="modal-header-text">
-          <h2 class="modal-title">Security & AI Ethics Notice</h2>
-          <p class="modal-subtitle">Please read and accept before using SpringBored Assignment</p>
-        </div>
-        <button class="modal-close-btn" id="btnCloseNotice" style="display:none;" title="Close Notice">✕</button>
-      </div>
-
-      <div class="modal-body">
-        <div class="notice-item">
-          <div class="notice-icon shield">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self'; img-src 'self'; connect-src https://generativelanguage.googleapis.com;"
+    />
+    <title>SpringBored — Assessment Solver</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="masthead">
+        <div class="masthead-main">
+          <div class="logo-frame">
+            <img src="Assets/Logo.png" alt="SpringBored" class="logo-img" />
           </div>
-          <div class="notice-text">
-            <strong>100% Private & Client-Side</strong>
-            <p>SpringBored runs entirely inside your browser. Your Gemini API key is stored locally in your browser storage and only used to contact official Google Gemini endpoints.</p>
+          <div class="masthead-text">
+            <div class="title-line">
+              <h1 class="title">SpringBored</h1>
+              <span class="edition edition-ai">Assessment</span>
+            </div>
+            <p class="subtitle">Gemini AI Assessment Solver</p>
           </div>
         </div>
-
-        <div class="notice-item">
-          <div class="notice-icon scale">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-          </div>
-          <div class="notice-text">
-            <strong>Ethical Academic Responsibility</strong>
-            <p>This extension is built for educational experimentation and study assistance. You remain responsible for upholding your institution's honor code.</p>
-          </div>
+        <div class="status-chip" title="Current state">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusState">Idle</span>
         </div>
+      </header>
 
-        <div class="notice-item">
-          <div class="notice-icon spark">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-          </div>
-          <div class="notice-text">
-            <strong id="noticeAiEngineTitle">Dynamic AI Assessment Solver</strong>
-            <p id="noticeAiEngineDesc">Assessment questions, code snippets, and choices are analyzed client-side via your chosen Google Gemini model using structured reasoning.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn btn-accept" id="btnAcceptNotice">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span id="btnAcceptText">I Understand & Accept</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Main App Wrapper -->
-  <div class="app-wrapper" id="appWrapper" style="display:none;">
-    <!-- Header -->
-    <header class="header">
-      <div class="logo-wrap">
-        <div class="logo-glow"></div>
-        <img src="Assets/Logo.png" alt="SpringBored" class="logo-img" />
-        <div class="logo-text">
-          <div class="title-row">
-            <h1 class="title">SpringBored</h1>
-            <span class="version-tag ai-tag">v2.2 AI</span>
-          </div>
-          <p class="subtitle">AI Assessment & Quiz Solver</p>
-        </div>
-      </div>
-      <div class="status-indicator">
-        <span class="status-dot" id="statusDot"></span>
-      </div>
-    </header>
-
-    <!-- Page Guard Banner (shown when not on Springboard) -->
-    <div class="page-guard" id="pageGuard" style="display:none;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="8" x2="12" y2="12"></line>
-        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-      </svg>
-      <span>Navigate to an Infosys Springboard assessment or quiz page first</span>
-    </div>
-
-    <!-- Status Card -->
-    <div class="status-card" id="statusCard">
-      <div class="status-icon" id="statusIcon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <polyline points="12 6 12 12 16 14"></polyline>
-        </svg>
-      </div>
-      <div class="status-content">
-        <span class="status-label">Status</span>
-        <p class="status-text" id="statusText">Ready to start</p>
-      </div>
-    </div>
-
-    <!-- Progress Section -->
-    <div class="progress-section" id="progressSection" style="display:none;">
-      <div class="progress-labels">
-        <span class="prog-label">Assessment Progress</span>
-        <span class="prog-count" id="progCount">0 / 0</span>
-      </div>
-      <div class="progress-bar-track">
-        <div class="progress-bar-fill" id="progressFill" style="width: 0%"></div>
-      </div>
-      <div class="progress-meta">
-        <span class="meta-badge done" id="doneBadge">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span id="doneCount">0</span> solved
-        </span>
-        <span class="meta-badge quiz" id="quizBadge">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-          <span id="quizBadgeModelText">Gemini AI</span>
-        </span>
-      </div>
-    </div>
-
-    <!-- Gemini AI Configuration Card -->
-    <div class="ai-config-card" id="aiConfigCard">
-      <div class="ai-card-header">
-        <div class="ai-card-title-wrap">
-          <span class="ai-spark-icon">✨</span>
-          <span class="ai-card-title">Gemini AI Model</span>
-        </div>
-        <label class="switch" title="Toggle AI Quiz Solver">
-          <input type="checkbox" id="aiQuizToggle" checked />
-          <span class="slider round"></span>
-        </label>
-      </div>
-
-      <div class="ai-card-body" id="aiCardBody">
-        <div class="api-key-row">
-          <div class="api-key-input-wrap">
-            <input
-              type="password"
-              id="geminiApiKey"
-              class="api-key-input"
-              placeholder="Paste Gemini API Key (AIzaSy...)"
-              autocomplete="off"
-              spellcheck="false"
-            />
-            <button type="button" class="btn-vis" id="btnToggleKeyVis" title="Show/Hide Key">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      <!-- First-run notice -->
+      <main class="consent-view" id="noticeModal" hidden>
+        <div class="notice-card">
+          <div class="notice-topline">
+            <span class="eyebrow">Before You Begin</span>
+            <button
+              class="notice-close"
+              id="btnCloseNotice"
+              title="Close notice"
+              type="button"
+              hidden
+            >
+              Close &times;
             </button>
           </div>
-          <button type="button" class="btn-save-key" id="btnSaveKey">Save & Test</button>
+
+          <h2 class="notice-title">AI-assisted assessment runner</h2>
+          <p class="notice-lede">
+            Reads questions on the page, queries your selected Google Gemini
+            model, and selects verified answers. Never submits an empty or
+            failed attempt.
+          </p>
+
+          <ol class="notice-list">
+            <li class="notice-item">
+              <span class="notice-num">01</span>
+              <div class="notice-text">
+                <strong>Direct browser-to-Google requests</strong>
+                <p>
+                  Your Gemini API key is stored locally in browser storage and
+                  sent directly to Google's API endpoint.
+                </p>
+              </div>
+            </li>
+            <li class="notice-item">
+              <span class="notice-num">02</span>
+              <div class="notice-text">
+                <strong>Verify critical results</strong>
+                <p>
+                  AI responses can occasionally be inaccurate. Use the live
+                  inspector and activity console to review answers.
+                </p>
+              </div>
+            </li>
+            <li class="notice-item">
+              <span class="notice-num">03</span>
+              <div class="notice-text">
+                <strong>Your responsibility</strong>
+                <p>
+                  Use this extension in accordance with your institution or
+                  organization's guidelines.
+                </p>
+              </div>
+            </li>
+          </ol>
+
+          <button class="btn btn-accept" id="btnAcceptNotice" type="button">
+            <span id="btnAcceptText">I understand — open dashboard</span>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              aria-hidden="true"
+            >
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </button>
+        </div>
+      </main>
+
+      <!-- Dashboard -->
+      <main class="app-wrapper" id="appWrapper" hidden>
+        <div class="page-guard" id="pageGuard" hidden>
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <span>Open an Infosys Springboard quiz or assessment tab first.</span>
         </div>
 
-        <div class="api-key-feedback">
-          <span class="key-status" id="keyStatusText">No key saved</span>
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="api-helper-link">
-            Get free key ↗
-          </a>
-        </div>
+        <section class="status-card panel" id="statusCard">
+          <div class="status-icon" id="statusIcon">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </div>
+          <div class="status-content">
+            <span class="status-label">Current Status</span>
+            <p class="status-text" id="statusText" aria-live="polite">
+              Ready to start
+            </p>
+          </div>
+        </section>
 
-        <div class="model-select-wrap" style="margin-top: 10px; display: flex; flex-direction: column; gap: 4px;">
-          <label for="modelSelect" style="font-size: 11px; color: #94a3b8; font-weight: 600;">Active AI Model:</label>
-          <select id="modelSelect" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(139, 92, 246, 0.35); color: #f8fafc; font-size: 11.5px; padding: 6px 8px; border-radius: 6px; outline: none; cursor: pointer;">
-            <option value="gemini-3.8-flash">Gemini 3.8 Flash (Autonomous Agents)</option>
-            <option value="gemini-3.5-flash">Gemini 3.5 Flash (High-Throughput)</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Reasoning)</option>
-            <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Recommended)</option>
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast)</option>
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Standard Pro)</option>
-            <option value="gemini-1.5-flash">Gemini 1.5 Flash (Standard Fast)</option>
-          </select>
-        </div>
-      </div>
+        <section class="progress-section panel" id="progressSection" hidden>
+          <div class="progress-labels">
+            <span class="prog-label">Assessment Progress</span>
+            <span class="prog-count" id="progCount">0 / 0</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-meta">
+            <span class="meta-badge done" id="doneBadge">
+              <span class="meta-value" id="doneCount">0</span> solved
+            </span>
+            <span class="meta-badge quiz" id="quizBadge">
+              <span id="quizBadgeModelText">Gemini</span>
+            </span>
+          </div>
+        </section>
+
+        <section class="engine-panel panel" id="aiConfigCard">
+          <div class="panel-head">
+            <div class="engine-title-wrap">
+              <span class="eyebrow">Gemini Engine</span>
+              <span class="engine-state" id="engineState">On</span>
+            </div>
+            <label class="switch" title="Enable or disable the AI solver">
+              <input type="checkbox" id="aiQuizToggle" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="engine-body" id="aiCardBody">
+            <div class="field">
+              <div class="field-top">
+                <label class="field-label" for="modelSelect">Model</label>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="helper-link"
+                  >Get API key &nearr;</a
+                >
+              </div>
+              <select id="modelSelect" class="select">
+                <option value="gemini-2.5-pro" selected>
+                  Gemini 2.5 Pro (Max Accuracy)
+                </option>
+                <option value="gemini-3.1-pro-preview">
+                  Gemini 3.1 Pro Preview (Latest)
+                </option>
+                <option value="gemini-3-flash-preview">
+                  Gemini 3 Flash Preview (Latest)
+                </option>
+                <option value="gemini-2.5-flash">
+                  Gemini 2.5 Flash (Fast Reasoning)
+                </option>
+                <option value="gemini-pro-latest">
+                  Gemini Pro (Auto-Latest)
+                </option>
+                <option value="gemini-flash-latest">
+                  Gemini Flash (Auto-Latest)
+                </option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="geminiApiKey">API Key</label>
+              <div class="key-row">
+                <div class="key-wrap">
+                  <input
+                    type="password"
+                    id="geminiApiKey"
+                    class="key-input"
+                    placeholder="Paste AIzaSy... key"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button
+                    type="button"
+                    class="btn-vis"
+                    id="btnToggleKeyVis"
+                    title="Show or hide the key"
+                  >
+                    Show
+                  </button>
+                </div>
+                <button type="button" class="btn-save-key" id="btnSaveKey">
+                  Save &amp; test
+                </button>
+              </div>
+            </div>
+
+            <div class="key-feedback">
+              <span class="key-status" id="keyStatusText">No key saved</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="controls" aria-label="Assessment controls">
+          <button class="btn btn-start" id="btnStart" type="button">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Solve assessment</span>
+          </button>
+          <button class="btn btn-pause" id="btnPause" type="button" disabled>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+            <span>Pause</span>
+          </button>
+          <button class="btn btn-stop" id="btnStop" type="button" disabled>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+            </svg>
+            <span>Stop</span>
+          </button>
+        </section>
+
+        <aside class="refresh-tip">
+          <div class="tip-head">
+            <span class="tip-label">Fullscreen Shortcut</span>
+            <kbd class="kbd-shortcut">Alt + S</kbd>
+          </div>
+          <p class="tip-text">
+            Use the floating corner HUD or press <strong>Alt + S</strong> to
+            start, pause, and inspect live Gemini prompts &amp; answers.
+          </p>
+        </aside>
+
+        <section class="log-section panel">
+          <div class="log-header">
+            <div class="log-title-wrap">
+              <span class="log-dot"></span>
+              <span>Activity Console</span>
+            </div>
+            <button class="clear-btn" id="clearLog" type="button">Clear</button>
+          </div>
+          <div class="log-feed" id="logFeed" aria-live="polite">
+            <div class="log-entry idle">
+              Ready. Open an assessment and press Solve assessment.
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p class="footer-copy">
+          <a
+            class="footer-brand"
+            href="https://springbored.ojasdeshpande.in/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >SpringBored</a
+          >
+          <span class="footer-mark">&copy;</span>
+          <span id="copyrightYear">2026</span>
+          <a
+            href="https://www.ojasdeshpande.in/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Ojas Shailesh Deshpande</a
+          >
+        </p>
+        <button
+          class="link-btn footer-privacy"
+          id="btnOpenNotice"
+          type="button"
+        >
+          Privacy &amp; terms
+        </button>
+      </footer>
     </div>
 
-    <!-- Controls -->
-    <div class="controls">
-      <button class="btn btn-start" id="btnStart">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-        <span>Solve Assessment Now</span>
-      </button>
-      <button class="btn btn-pause" id="btnPause" disabled>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-        <span>Pause</span>
-      </button>
-      <button class="btn btn-stop" id="btnStop" disabled>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
-        <span>Stop</span>
-      </button>
-    </div>
-
-    <!-- In-Assessment Tip -->
-    <div class="refresh-tip">
-      <div class="tip-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-      </div>
-      <p class="tip-text">
-        In fullscreen mode, you can also use the purple floating on-screen button or press <strong>Alt + S</strong> anytime!
-      </p>
-    </div>
-
-    <!-- Activity Log -->
-    <div class="log-section">
-      <div class="log-header">
-        <div class="log-title-wrap">
-          <span class="log-dot"></span>
-          <span>Live Assessment Feed</span>
-        </div>
-        <button class="clear-btn" id="clearLog">Clear</button>
-      </div>
-      <div class="log-feed" id="logFeed">
-        <div class="log-entry idle">Ready. Open an assessment and click Solve Assessment Now.</div>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="footer">
-      <span class="footer-note">⚡ Google Gemini AI • Direct API</span>
-      <button class="btn-text" id="btnOpenNotice">Privacy Notice</button>
-    </footer>
-  </div>
-
-  <script src="popup.js"></script>
-</body>
+    <script src="popup.js"></script>
+  </body>
 </html>

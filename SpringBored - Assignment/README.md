@@ -1,4 +1,7 @@
-<a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Logo" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 0 8px 8px;" /></a>
+<p align="left">
+  <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 8px 8px 0; vertical-align: middle;" /></a>
+  <a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/SpringBored/main/SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #070d17; border-radius: 10px; padding: 4px; margin: 0 0 8px 8px; vertical-align: middle;" /></a>
+</p>
 
 # ⚡ SpringBored (Assignment Edition) v2.3
 
@@ -63,9 +66,9 @@ SpringBored Assignment Edition is a focused, high-precision Chrome Extension (Ma
 ## 📖 How to Use
 
 1. Log into Infosys Springboard and open your target assessment or quiz.
-2. If taking a full-window or fullscreen assessment, look for the purple **SpringBored AI** HUD in the corner.
-3. Click **⚡ Auto-Solve Assessment Now** on the HUD or press **Alt + S**.
-4. Alternatively, click the extension icon in your browser toolbar and click **Solve Assessment Now**.
+2. If taking a full-window or fullscreen assessment, look for the **SpringBored** HUD in the corner.
+3. Click **Solve assessment** on the HUD or press **Alt + S**.
+4. Alternatively, click the extension icon in your browser toolbar and click **Solve assessment**.
 5. SpringBored will automatically start the test, attempt each section, solve each question with your selected Gemini model, save your answers, and submit the assessment!
 
 ---

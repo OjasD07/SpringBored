@@ -21,25 +21,31 @@ const btnAcceptNotice = document.getElementById('btnAcceptNotice');
 const btnAcceptText  = document.getElementById('btnAcceptText');
 const btnCloseNotice = document.getElementById('btnCloseNotice');
 const btnOpenNotice  = document.getElementById('btnOpenNotice');
+const statusState    = document.getElementById('statusState');
+const copyrightYear  = document.getElementById('copyrightYear');
 
 let isPaused = false;
 let hasAcceptedTerms = false;
+let lastProgress = null;
+
+// ── Auto copyright year ──────────────────────────────────────────────────────
+if (copyrightYear) copyrightYear.textContent = String(new Date().getFullYear());
 
 // ── Screen Navigation Helpers ────────────────────────────────────────────────
 function showDashboard() {
-  noticeModal.style.display = 'none';
-  appWrapper.style.display = 'flex';
+  noticeModal.hidden = true;
+  appWrapper.hidden = false;
 }
 
 function showNotice(canClose = false) {
-  appWrapper.style.display = 'none';
-  noticeModal.style.display = 'flex';
+  appWrapper.hidden = true;
+  noticeModal.hidden = false;
   if (canClose) {
-    if (btnCloseNotice) btnCloseNotice.style.display = 'block';
-    if (btnAcceptText)  btnAcceptText.textContent = 'Back to Dashboard';
+    if (btnCloseNotice) btnCloseNotice.hidden = false;
+    if (btnAcceptText)  btnAcceptText.textContent = 'Back to dashboard';
   } else {
-    if (btnCloseNotice) btnCloseNotice.style.display = 'none';
-    if (btnAcceptText)  btnAcceptText.textContent = 'I Understand & Accept';
+    if (btnCloseNotice) btnCloseNotice.hidden = true;
+    if (btnAcceptText)  btnAcceptText.textContent = 'I understand — open the dashboard';
   }
 }
 
@@ -88,9 +94,10 @@ const ICONS = {
 // ── Apply status state to UI ──────────────────────────────────────────────────
 function applyStatus(state, message, data = {}) {
   statusDot.className  = `status-dot ${state}`;
-  statusCard.className = `status-card ${state}`;
+  statusCard.className = `status-card panel ${state}`;
   statusIcon.innerHTML = ICONS[state] || ICONS.idle;
   statusText.textContent = message;
+  if (statusState) statusState.textContent = state;
 
   const isActive = state === 'running' || state === 'paused';
   btnStart.disabled = isActive;
@@ -98,18 +105,33 @@ function applyStatus(state, message, data = {}) {
   btnStop.disabled  = !isActive;
 
   if (state === 'paused') {
-    btnPause.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> <span>Resume</span>`;
+    btnPause.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> <span>Resume</span>`;
   } else {
-    btnPause.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> <span>Pause</span>`;
+    btnPause.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> <span>Pause</span>`;
   }
 
   if (data.total > 0) {
-    progressSection.style.display = 'flex';
-    const pct = Math.min(100, Math.round((data.completed / data.total) * 100));
+    lastProgress = {
+      completed: Number.isFinite(data.completed) ? data.completed : 0,
+      total: data.total,
+      skipped: Number.isFinite(data.skipped) ? data.skipped : (lastProgress?.skipped || 0)
+    };
+  }
+
+  const shownProgress = data.total > 0
+    ? lastProgress
+    : ((state === 'running' || state === 'paused') ? lastProgress : null);
+
+  if (progressSection && shownProgress && shownProgress.total > 0) {
+    progressSection.hidden = false;
+    const pct = Math.min(100, Math.round((shownProgress.completed / shownProgress.total) * 100));
     progressFill.style.width = pct + '%';
-    progCount.textContent   = `${data.completed} / ${data.total}`;
-    doneCount.textContent   = data.completed;
-    skipCount.textContent   = data.skipped ?? 0;
+    progCount.textContent   = `${shownProgress.completed} / ${shownProgress.total}`;
+    doneCount.textContent   = shownProgress.completed;
+    skipCount.textContent   = shownProgress.skipped ?? 0;
+  } else if (progressSection) {
+    progressSection.hidden = true;
+    if (state === 'idle') lastProgress = null;
   }
 }
 
@@ -120,7 +142,16 @@ function addLog(text, type = 'running') {
 
   const entry = document.createElement('div');
   entry.className = `log-entry ${type}`;
-  entry.textContent = text;
+
+  const stamp = document.createElement('span');
+  stamp.className = 'log-time';
+  stamp.textContent = new Date().toLocaleTimeString('en-GB', { hour12: false });
+
+  const message = document.createElement('span');
+  message.className = 'log-msg';
+  message.textContent = text;
+
+  entry.append(stamp, message);
   logFeed.appendChild(entry);
   logFeed.scrollTop = logFeed.scrollHeight;
 
@@ -148,8 +179,9 @@ btnStart.addEventListener('click', async () => {
     return;
   }
   isPaused = false;
+  lastProgress = null;
   applyStatus('running', 'Opening Contents tab...');
-  addLog('▶ Automation started', 'running');
+  addLog('Automation started', 'running');
   await sendToContentScript('START');
 });
 
@@ -157,12 +189,12 @@ btnPause.addEventListener('click', async () => {
   if (isPaused) {
     isPaused = false;
     applyStatus('running', 'Resuming...');
-    addLog('▶ Resumed', 'running');
+    addLog('Resumed', 'running');
     await sendToContentScript('RESUME');
   } else {
     isPaused = true;
     applyStatus('paused', 'Paused by user');
-    addLog('⏸ Paused', 'skip');
+    addLog('Paused by user', 'skip');
     await sendToContentScript('PAUSE');
   }
 });
@@ -178,7 +210,7 @@ btnStop.addEventListener('click', async () => {
 });
 
 clearLogBtn.addEventListener('click', () => {
-  logFeed.innerHTML = '<div class="log-entry idle">Log cleared</div>';
+  logFeed.innerHTML = '<div class="log-entry idle">Activity cleared</div>';
 });
 
 // ── Listen for status updates from content script ─────────────────────────────
@@ -186,6 +218,14 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type !== 'STATUS_UPDATE') return;
 
   const { status, message, completed = 0, total = 0, skipped = 0 } = msg;
+
+  // Keep the popup's Pause/Resume button in sync with a run controlled from
+  // elsewhere (e.g. the floating HUD or another window).
+  if (status === 'paused') {
+    isPaused = true;
+  } else if (status === 'running' || status === 'stopped' || status === 'done' || status === 'error') {
+    isPaused = false;
+  }
 
   const logType =
     status === 'done'    ? 'done'    :
@@ -214,9 +254,9 @@ chrome.runtime.onMessage.addListener((msg) => {
 
   if (!isOnSpringboard) {
     applyStatus('idle', 'Navigate to Infosys Springboard first');
-    pageGuard.style.display = 'flex';
+    pageGuard.hidden = false;
     pageGuard.innerHTML = `
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
       </svg>
       <span>Not on Springboard. Go to <strong>infyspringboard.onwingspan.com</strong> first.</span>`;
@@ -228,7 +268,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     const resp = await chrome.tabs.sendMessage(tab.id, { action: 'GET_STATUS' });
 
     if (!resp?.onViewerPage) {
-      pageGuard.style.display = 'flex';
+      pageGuard.hidden = false;
       btnStart.disabled = true;
       applyStatus('idle', 'Open a course and navigate to the viewer player page');
       return;

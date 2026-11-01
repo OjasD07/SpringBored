@@ -1,4 +1,7 @@
-<a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Logo" style="float: ; width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 0 8px 8px;" /></a>
+<p align="left">
+  <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 8px 8px 0; vertical-align: middle;" /></a>
+  <a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/SpringBored/main/SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #070d17; border-radius: 10px; padding: 4px; margin: 0 0 8px 8px; vertical-align: middle;" /></a>
+</p>
 
 # ⚡ SpringBored v2.0
 
@@ -17,8 +20,8 @@ SpringBored is a lightweight Chrome Extension (Manifest V3) designed to autonomo
 - 🛡️ **Assessment & Quiz Integrity**: Automatically identifies and skips all quizzes, tests, and graded assessments so you complete actual evaluations yourself.
 - 🔒 **100% Client-Side & Private**: Runs entirely within your local browser. Zero credentials, tokens, or browsing history are logged or transmitted externally.
 - ⚖️ **Terms of Service & Security Notice**: Dedicated one-time consent onboarding covering privacy, academic honor code compliance, and evaluation safety.
-- 🎨 **Modern Dark Glassmorphic UI**: Sleek interface featuring a glowing status beacon, progress percentage bar, live activity feed, clear log button, and helpful refresh guidance.
-- ⏯️ **Interactive Controls**: Start, Pause, Resume, and Stop controls directly accessible from the popup.
+- 🎨 **Editorial Interface**: Warm paper, ink navy, and signal orange; a clear status beacon, progress bar, live activity feed, and refresh guidance.
+- ⏯️ **Interactive Controls**: Run, Pause, Resume, and Stop controls directly accessible from the popup.
 
 ---
 
@@ -44,8 +47,8 @@ SpringBored is a lightweight Chrome Extension (Manifest V3) designed to autonomo
 2. Open any course and enter the course player page (URL containing `/viewer/`).
 3. **Tip**: Refresh the course player page once before starting so Angular mounts cleanly.
 4. Click the **SpringBored** extension icon in your browser toolbar.
-5. _First time only_: Review and accept the **Security & Terms of Service Notice**.
-6. Click **Start** — SpringBored takes over, automatically completing lessons and advancing through modules!
+5. _First time only_: Review and accept the **Privacy & terms** notice.
+6. Click **Run course** — SpringBored takes over, automatically completing lessons and advancing through modules!
 
 > **Note**: Keep the Springboard browser tab active (not minimized) for optimal performance, as Chromium throttles timers and background tasks in hidden tabs.
 
@@ -98,7 +101,7 @@ SpringBored/
 ├── background.js       # Background service worker for tab messaging
 ├── content.js          # Core automation engine (TOC, playback, auto-confirm)
 ├── popup.html          # Extension popup markup (Notice + Automation Dashboard)
-├── popup.css           # Modern dark-mode glassmorphic design system
+├── popup.css           # Editorial paper-and-ink design system
 ├── popup.js            # Popup controller, live progress & status listeners
 ├── Assets/             # Visual assets
 │   └── Logo.png        # Extension banner logo

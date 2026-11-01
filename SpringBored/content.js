@@ -12,11 +12,23 @@
   let isRunning = false;
   let isPaused  = false;
 
+  // Keep the last progress numbers so pause/resume/stop updates do not make the
+  // popup hide its progress panel.
+  let lastProgress = { completed: 0, total: 0, skipped: 0 };
+
   // ─── Utils ────────────────────────────────────────────────────────────────
-  const log = (msg) => console.log(`%c[SpringBored] ${msg}`, 'color:#7c6bff;font-weight:bold');
+  const log = (msg) => console.log(`%c[SpringBored] ${msg}`, 'color:#e4601e;font-weight:bold');
 
   function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
+  }
+
+  /** Wait until the run is resumed, or return immediately when it is stopped. */
+  async function waitWhilePaused() {
+    while (isRunning && isPaused) {
+      await sleep(400);
+    }
+    return isRunning;
   }
 
   /** Wait for a CSS selector to appear in the DOM, with timeout. */
@@ -35,7 +47,22 @@
 
   /** Dispatch status back to popup */
   function sendStatus(data) {
-    chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', ...data }).catch(() => {});
+    if (Number.isFinite(data.total) && data.total > 0) {
+      lastProgress = {
+        completed: Number.isFinite(data.completed) ? data.completed : lastProgress.completed,
+        total: data.total,
+        skipped: Number.isFinite(data.skipped) ? data.skipped : lastProgress.skipped
+      };
+    }
+
+    const payload = { ...data };
+    if (payload.total === undefined && lastProgress.total > 0) {
+      payload.completed = Number.isFinite(payload.completed) ? payload.completed : lastProgress.completed;
+      payload.total = lastProgress.total;
+      payload.skipped = Number.isFinite(payload.skipped) ? payload.skipped : lastProgress.skipped;
+    }
+
+    chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', ...payload }).catch(() => {});
   }
 
   // ─── STEP 1: Open the Contents / TOC sidebar tab ──────────────────────────
@@ -83,6 +110,7 @@
 
     // Expand in multiple passes (folders may reveal sub-folders after opening)
     for (let pass = 0; pass < 4; pass++) {
+      if (!isRunning || isPaused) break;
       const collapsedFolders = [...toc.querySelectorAll(
         'mat-tree-node.ws-player-tree-node[aria-expanded="false"]'
       )].filter(node => !!node.querySelector('mat-icon.toc-expand-icon'));
@@ -91,6 +119,7 @@
       log(`Pass ${pass + 1}: expanding ${collapsedFolders.length} folder(s)`);
 
       for (const folder of collapsedFolders) {
+        if (!isRunning || isPaused) break;
         const toggle = folder.querySelector('mat-icon.toc-expand-icon, button') || folder;
         toggle.click();
         await sleep(350);
@@ -328,109 +357,127 @@
 
   // ─── STEP 4: Handle video or text / web-module content ───────────────────
   // Seek to end for video, or click "Mark as Complete" for reading content.
-  function handleContent(lessonNode) {
-    return new Promise(async (resolve) => {
-      let resolved = false;
-      const done = (reason) => {
-        if (!resolved) { resolved = true; resolve(reason); }
-      };
+  // Resolves with a short reason string; "paused" and "stopped" mean the caller
+  // must NOT advance to the next lesson.
+  async function handleContent(lessonNode) {
+    if (!isRunning) return 'stopped';
+    if (isPaused) return 'paused';
 
-      // 1. Check right away if this reading material has a "Mark as Complete" button
-      if (await markContentAsComplete(lessonNode)) {
-        log('Content marked as completed via button');
-        return done('marked_complete');
+    // 1. Check right away if this reading material has a "Mark as Complete" button
+    if (await markContentAsComplete(lessonNode)) {
+      log('Content marked as completed via button');
+      return 'marked_complete';
+    }
+
+    const pollMs = 150;
+    const maxWaitMs = 6000; // 6s max before assuming static slide content
+    let elapsed = 0;
+    let nextMarkCheck = 450;
+
+    while (isRunning) {
+      if (isPaused) {
+        try { document.querySelector('video')?.pause(); } catch (_) {}
+        return 'paused';
       }
 
-      // 2. Poll for video OR Mark as Complete button
-      let elapsed = 0;
-      const pollMs = 150;
-      const maxWaitMs = 6000; // 6s max before assuming static slide content
+      elapsed += pollMs;
 
-      const poll = setInterval(async () => {
-        if (!isRunning || isPaused) { clearInterval(poll); return done('paused'); }
+      // Re-check for Mark as Complete during the first 2.5 seconds.
+      if (elapsed <= 2500 && elapsed >= nextMarkCheck) {
+        nextMarkCheck += 450;
+        if (await markContentAsComplete(lessonNode)) {
+          log('Content marked as completed via button (after mount)');
+          return 'marked_complete';
+        }
+      }
 
-        elapsed += pollMs;
+      const video = document.querySelector('video');
 
-        // Re-check for Mark as Complete button during the first 2.5 seconds
-        if (elapsed <= 2500 && elapsed % 450 === 0) {
-          const marked = await markContentAsComplete(lessonNode);
-          if (marked) {
-            clearInterval(poll);
-            log('Content marked as completed via button (after mount)');
-            return done('marked_complete');
-          }
+      if (video && video.readyState >= 2 && Number.isFinite(video.duration) && video.duration > 0) {
+        // A previous lesson's ended video can still be mounted briefly. Give the
+        // new lesson time to replace it before treating it as this lesson's video.
+        if (video.ended && video.currentTime >= video.duration - 0.5 && elapsed < 3500) {
+          await sleep(pollMs);
+          continue;
         }
 
-        const video = document.querySelector('video');
+        const dur = video.duration;
+        log(`Video ready. Duration=${dur.toFixed(1)}s`);
 
-        if (video && video.readyState >= 2 && video.duration > 0 && !isNaN(video.duration)) {
-          // If this video element is already ended from a previous lesson and still lingering,
-          // wait for the new lesson video to load (for up to 3.5s)
-          if (video.ended && video.currentTime >= video.duration - 0.5 && elapsed < 3500) {
-            return;
-          }
+        video.muted = true;
+        try { video.playbackRate = 16; } catch (_) {}
 
-          clearInterval(poll);
-          const dur = video.duration;
-          log(`Video ready. Duration=${dur.toFixed(1)}s`);
-
-          // Speed up & mute
-          video.muted = true;
-          try { video.playbackRate = 16; } catch (_) {}
-
-          // Ensure it's playing
-          if (video.paused) {
-            try { await video.play(); } catch (_) {}
-          }
-
-          // Seek to 3s before end
-          const seekTo = Math.max(0, dur - 3);
-          await sleep(150);
-
-          // Video.js wraps the native <video> — setting currentTime directly works,
-          // but we should also try the vjs player API if available
-          video.currentTime = seekTo;
-          // Also try via Video.js global player instance if present
-          try {
-            if (window.videojs) {
-              const vjsPlayer = window.videojs.getPlayers && Object.values(window.videojs.getPlayers())[0];
-              if (vjsPlayer) vjsPlayer.currentTime(seekTo);
-            }
-          } catch (_) {}
-          log(`Seeked to ${seekTo.toFixed(1)}s`);
-
-          // Listen for end
-          const onEnded = async () => {
-            video.removeEventListener('ended', onEnded);
-            log('Video ended. Registering completion (1s)...');
-            await sleep(1000);
-            done('video_done');
-          };
-          video.addEventListener('ended', onEnded);
-
-          // Safety: if still not resolved 10s after seek, force advance
-          setTimeout(async () => {
-            video.removeEventListener('ended', onEnded);
-            if (!resolved) {
-              log('Safety timeout — advancing anyway');
-              await sleep(1000);
-              done('video_timeout');
-            }
-          }, 10000);
-
-        } else if (elapsed >= maxWaitMs) {
-          clearInterval(poll);
-          // Final check for Mark as Complete before giving up
-          const finalMark = await markContentAsComplete(lessonNode);
-          if (finalMark) {
-            return done('marked_complete');
-          }
-          log('No video or complete button found — treating as non-video slide content');
-          await sleep(1000);
-          done('no_video');
+        if (video.paused) {
+          try { await video.play(); } catch (_) {}
         }
-      }, pollMs);
-    });
+
+        const seekTo = Math.max(0, dur - 3);
+        await sleep(150);
+
+        if (!isRunning) return 'stopped';
+        if (isPaused) {
+          try { video.pause(); } catch (_) {}
+          return 'paused';
+        }
+
+        // Video.js wraps the native <video>. Setting currentTime on the native
+        // element works, but use the player API too when it is available.
+        video.currentTime = seekTo;
+        try {
+          if (window.videojs) {
+            const players = window.videojs.getPlayers && window.videojs.getPlayers();
+            const vjsPlayer = players && Object.values(players)[0];
+            if (vjsPlayer) vjsPlayer.currentTime(seekTo);
+          }
+        } catch (_) {}
+        log(`Seeked to ${seekTo.toFixed(1)}s`);
+
+        return await waitForVideoEnd(video);
+      }
+
+      if (elapsed >= maxWaitMs) {
+        // Final check for Mark as Complete before giving up.
+        if (await markContentAsComplete(lessonNode)) {
+          return 'marked_complete';
+        }
+        log('No video or complete button found — treating as non-video slide content');
+        await sleep(1000);
+        return isRunning ? 'no_video' : 'stopped';
+      }
+
+      await sleep(pollMs);
+    }
+
+    return 'stopped';
+  }
+
+  /** Poll a playing video instead of leaving a timer/listener behind. */
+  async function waitForVideoEnd(video) {
+    const timeoutAt = Date.now() + 10000;
+
+    while (isRunning) {
+      if (isPaused) {
+        try { video.pause(); } catch (_) {}
+        return 'paused';
+      }
+
+      const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
+      if (video.ended || video.currentTime >= duration - 0.25) {
+        log('Video ended. Registering completion (1s)...');
+        await sleep(1000);
+        return isRunning ? 'video_done' : 'stopped';
+      }
+
+      if (Date.now() >= timeoutAt) {
+        log('Video end timeout — advancing anyway');
+        await sleep(1000);
+        return isRunning ? 'video_timeout' : 'stopped';
+      }
+
+      await sleep(200);
+    }
+
+    return 'stopped';
   }
 
   // ─── STEP 5: Click the Next / → button in the viewer ─────────────────────
@@ -439,6 +486,8 @@
   //   class="... navigation-btn-frwd navigation-btn ..."
   //   mat-icon text = "arrow_forward_ios"
   async function clickNextButton() {
+    if (!isRunning || isPaused) return false;
+
     // Strategy 1: exact aria-label from real DOM
     const exact = [
       'button[aria-label="next content"]',      // confirmed from live DOM
@@ -481,26 +530,68 @@
     return false;
   }
 
+  /** Extract a human title without tree icons/status text. */
+  function lessonTitle(lesson) {
+    const label = (lesson.getAttribute('aria-label') || lesson.getAttribute('title') || '').trim();
+    const titleEl = lesson.querySelector(
+      '.ws-player-tree-node-title, .toc-item-title, .tree-node-title, [class*="node-title"], [class*="item-title"]'
+    );
+    const raw = label || (titleEl?.textContent || lesson.innerText || lesson.textContent || '').trim();
+
+    return raw
+      .split('\n')
+      .map(s => s.trim())
+      .find(Boolean)
+      ?.replace(/\b[a-z]+(?:_[a-z]+)+\b/gi, ' ') // material icon ligatures, e.g. play_circle
+      .replace(/\b\d{1,3}\s*%/g, '')
+      .replace(/\b(completed|complete|in progress|not started|started)\b/gi, '')
+      .replace(/^(check|done|lock|task_alt|verified)\s+/i, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 100) || '';
+  }
+
+  /** Stable-ish key for a lesson across Angular re-renders. */
+  function lessonKey(lesson, occurrenceMap) {
+    const title = lessonTitle(lesson);
+    const base = lesson.id ? `id:${lesson.id}` : `title:${title}`;
+    const occurrence = occurrenceMap.get(base) || 0;
+    occurrenceMap.set(base, occurrence + 1);
+    return `${base}#${occurrence}`;
+  }
+
+  function findUnprocessedLesson(lessons, processed) {
+    const occurrenceMap = new Map();
+    for (const lesson of lessons) {
+      const key = lessonKey(lesson, occurrenceMap);
+      if (!processed.has(key)) return { lesson, key };
+    }
+    return null;
+  }
+
   // ─── Main automation loop ─────────────────────────────────────────────────
   async function runAutomation() {
+    if (isRunning) return;
+
     if (!ON_VIEWER_PAGE) {
       sendStatus({
         status: 'error',
         message: 'Please navigate to a course player page first (the URL should contain /viewer/).',
       });
-      isRunning = false;
       return;
     }
 
-    log('▶ Automation started');
+    log('Automation started');
     isRunning = true;
     isPaused  = false;
+    lastProgress = { completed: 0, total: 0, skipped: 0 };
 
     sendStatus({ status: 'running', message: 'Opening Contents tab...' });
 
     // 1. Explicitly open Contents tab and ensure it is ready before starting automation
     let tabReady = false;
     for (let attempt = 1; attempt <= 4; attempt++) {
+      if (!(await waitWhilePaused())) return;
       await openContentsTab();
       await sleep(1000);
       const toc = document.querySelector('.viewer-toc-container, #ws-viewer-toc-tree-parent');
@@ -537,45 +628,64 @@
 
     let completed = 0;
     let skipped   = 0;
-    const total   = lessons.length;
+    const processed = new Set();
+    let emptyPasses = 0;
 
-    for (let i = 0; i < lessons.length; i++) {
-      if (!isRunning) break;
-      while (isPaused) { await sleep(400); }
+    while (isRunning) {
+      if (!(await waitWhilePaused())) break;
 
-      // Ensure Contents tab is open & folders expanded between modules
-      await openContentsTab();
-      await expandAllFolders();
+      // Refresh on every pass. Angular re-creates tree nodes as lessons change,
+      // so a reference captured at the start can point at a detached element.
+      lessons = collectLessons();
+      let next = findUnprocessedLesson(lessons, processed);
 
-      // Refresh list if new folders opened
-      const currentList = collectLessons();
-      if (currentList.length > lessons.length) {
-        lessons = currentList;
+      if (!next) {
+        // Newly revealed folders can add lessons after the first expansion.
+        if (lessons.length === 0 && emptyPasses < 3) {
+          emptyPasses++;
+          await sleep(800);
+          continue;
+        }
+        await expandAllFolders();
+        lessons = collectLessons();
+        next = findUnprocessedLesson(lessons, processed);
+
+        if (!next && emptyPasses < 1) {
+          emptyPasses++;
+          await sleep(800);
+          continue;
+        }
       }
 
-      const lesson = (lessons[i]?.id && document.getElementById(lessons[i].id)) || lessons[i];
-      if (!lesson) continue;
+      if (!next) break;
+      emptyPasses = 0;
 
-      const title  = lesson.textContent.trim().replace(/\s+/g, ' ').slice(0, 60);
+      const { lesson, key } = next;
+      const title = lessonTitle(lesson).replace(/\s+/g, ' ').slice(0, 60) || 'Untitled lesson';
+      const total = Math.max(lessons.length, processed.size + 1);
 
       // Skip assignments
       if (isAssignment(lesson)) {
-        log(`⏭ Skipping assignment: "${title}"`);
+        log(`Skipping assignment: "${title}"`);
+        processed.add(key);
         skipped++;
-        sendStatus({ status: 'running', message: `Skipping: ${title}`, completed, total: lessons.length, skipped });
+        sendStatus({ status: 'running', message: `Skipping: ${title}`, completed, total, skipped });
         continue;
       }
 
       // Skip already-completed
       if (isCompleted(lesson)) {
-        log(`✓ Already done: "${title}"`);
+        log(`Already complete: "${title}"`);
+        processed.add(key);
         completed++;
-        sendStatus({ status: 'running', message: `Already done: ${title}`, completed, total: lessons.length, skipped });
+        sendStatus({ status: 'running', message: `Already complete: ${title}`, completed, total, skipped });
         continue;
       }
 
-      log(`▶ [${i + 1}/${lessons.length}] "${title}"`);
-      sendStatus({ status: 'running', message: `[${i + 1}/${lessons.length}] ${title}`, completed, total: lessons.length, skipped });
+      if (!(await waitWhilePaused())) break;
+
+      log(`[${processed.size + 1}/${total}] "${title}"`);
+      sendStatus({ status: 'running', message: `[${processed.size + 1}/${total}] ${title}`, completed, total, skipped });
 
       // Check if clicking Next already loaded and selected this lesson
       const isAlreadyActive =
@@ -594,24 +704,38 @@
         await sleep(150);
       }
 
+      if (!isRunning) break;
+      if (isPaused) continue;
+
       // Handle video / text / web-module / mark-as-complete
-      await handleContent(lesson);
+      const outcome = await handleContent(lesson);
+
+      if (outcome === 'stopped') break;
+      // Do not count or advance a lesson that was paused mid-way. On resume the
+      // refreshed list selects it again.
+      if (outcome === 'paused' || isPaused) continue;
+      if (!isRunning) break;
 
       // Click Next to confirm completion
       await clickNextButton();
+      if (!isRunning) break;
 
+      processed.add(key);
       completed++;
-      sendStatus({ status: 'running', message: `✓ Done: ${title}`, completed, total: lessons.length, skipped });
+      sendStatus({ status: 'running', message: `Done: ${title}`, completed, total, skipped });
 
       // Short breathe between lessons
       await sleep(250);
     }
 
-    // ── Finished ──
-    isRunning = false;
-    const msg = `🎉 All done! Completed ${completed}, skipped ${skipped} assignment(s).`;
-    log(msg);
-    sendStatus({ status: 'done', message: msg, completed, total, skipped });
+    // STOP already sent its own status. Only announce completion when the loop
+    // ran out of lessons on its own.
+    if (isRunning) {
+      isRunning = false;
+      const msg = `Complete. ${completed} lesson(s) done, ${skipped} assignment(s) skipped.`;
+      log(msg);
+      sendStatus({ status: 'done', message: msg, completed, total: Math.max(lessons.length, processed.size), skipped });
+    }
   }
 
   // ─── Message listener ─────────────────────────────────────────────────────
@@ -622,13 +746,17 @@
         sendResponse({ ok: true, onViewerPage: ON_VIEWER_PAGE });
         break;
       case 'PAUSE':
-        isPaused = true;
-        sendStatus({ status: 'paused', message: 'Paused.' });
+        if (isRunning && !isPaused) {
+          isPaused = true;
+          sendStatus({ status: 'paused', message: 'Paused.' });
+        }
         sendResponse({ ok: true });
         break;
       case 'RESUME':
-        isPaused = false;
-        sendStatus({ status: 'running', message: 'Resumed.' });
+        if (isRunning && isPaused) {
+          isPaused = false;
+          sendStatus({ status: 'running', message: 'Resumed.' });
+        }
         sendResponse({ ok: true });
         break;
       case 'STOP':

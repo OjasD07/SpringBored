@@ -21,6 +21,9 @@ const btnAcceptNotice    = document.getElementById('btnAcceptNotice');
 const btnAcceptText     = document.getElementById('btnAcceptText');
 const btnCloseNotice    = document.getElementById('btnCloseNotice');
 const btnOpenNotice     = document.getElementById('btnOpenNotice');
+const statusState       = document.getElementById('statusState');
+const copyrightYear     = document.getElementById('copyrightYear');
+const engineState       = document.getElementById('engineState');
 
 // AI Settings Elements
 const aiQuizToggle      = document.getElementById('aiQuizToggle');
@@ -32,22 +35,26 @@ const keyStatusText     = document.getElementById('keyStatusText');
 
 let isPaused = false;
 let hasAcceptedTerms = false;
+let lastProgress = null;
+
+// ── Auto copyright year ──────────────────────────────────────────────────────
+if (copyrightYear) copyrightYear.textContent = String(new Date().getFullYear());
 
 // ── Screen Navigation Helpers ────────────────────────────────────────────────
 function showDashboard() {
-  noticeModal.style.display = 'none';
-  appWrapper.style.display = 'flex';
+  noticeModal.hidden = true;
+  appWrapper.hidden = false;
 }
 
 function showNotice(canClose = false) {
-  appWrapper.style.display = 'none';
-  noticeModal.style.display = 'flex';
+  appWrapper.hidden = true;
+  noticeModal.hidden = false;
   if (canClose) {
-    if (btnCloseNotice) btnCloseNotice.style.display = 'block';
-    if (btnAcceptText)  btnAcceptText.textContent = 'Back to Dashboard';
+    if (btnCloseNotice) btnCloseNotice.hidden = false;
+    if (btnAcceptText)  btnAcceptText.textContent = 'Back to dashboard';
   } else {
-    if (btnCloseNotice) btnCloseNotice.style.display = 'none';
-    if (btnAcceptText)  btnAcceptText.textContent = 'I Understand & Accept';
+    if (btnCloseNotice) btnCloseNotice.hidden = true;
+    if (btnAcceptText)  btnAcceptText.textContent = 'I understand — open the dashboard';
   }
 }
 
@@ -85,16 +92,28 @@ btnOpenNotice.addEventListener('click', () => {
 });
 
 // ── Dynamic Model Name Formatter ──────────────────────────────────────────────
+const LEGACY_MODELS = new Set([
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+  'gemini-1.5-pro',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-001',
+  'gemini-2.0-flash-lite',
+  'gemini-2.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash'
+]);
+
 function formatModelName(modelCode) {
   if (!modelCode) return 'Gemini AI';
   const clean = String(modelCode).replace(/^models\//, '').trim();
-  if (clean === 'gemini-3.8-flash') return 'Gemini 3.8 Flash';
-  if (clean === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
+  if (clean === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
+  if (clean === 'gemini-3-pro-preview') return 'Gemini 3 Pro';
+  if (clean === 'gemini-3-flash-preview') return 'Gemini 3 Flash';
   if (clean === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
   if (clean === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
-  if (clean === 'gemini-2.0-flash') return 'Gemini 2.0 Flash';
-  if (clean === 'gemini-1.5-pro') return 'Gemini 1.5 Pro';
-  if (clean === 'gemini-1.5-flash') return 'Gemini 1.5 Flash';
+  if (clean === 'gemini-pro-latest') return 'Gemini Pro Latest';
+  if (clean === 'gemini-flash-latest') return 'Gemini Flash Latest';
   return clean
     .split('-')
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
@@ -105,6 +124,18 @@ function formatModelName(modelCode) {
 const modelSelect         = document.getElementById('modelSelect');
 const quizBadgeModelText  = document.getElementById('quizBadgeModelText');
 
+/** Keep the dropdown in sync with a model that the API validated but the list lacks. */
+function ensureModelOption(modelName) {
+  if (!modelSelect || !modelName) return;
+  const exists = [...modelSelect.options].some(o => o.value === modelName);
+  if (!exists) {
+    const opt = document.createElement('option');
+    opt.value = modelName;
+    opt.textContent = `${formatModelName(modelName)} (validated)`;
+    modelSelect.appendChild(opt);
+  }
+}
+
 chrome.storage.local.get(['aiQuizEnabled', 'geminiApiKey', 'geminiModel'], (data) => {
   const isEnabled = data.aiQuizEnabled !== false; // Default true
   if (aiQuizToggle) {
@@ -112,21 +143,14 @@ chrome.storage.local.get(['aiQuizEnabled', 'geminiApiKey', 'geminiModel'], (data
     updateAiCardState(isEnabled);
   }
 
-  const validModels = [
-    'gemini-3.8-flash',
-    'gemini-3.5-flash',
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash'
-  ];
-  let modelName = data.geminiModel;
-  if (!modelName || !validModels.includes(modelName)) {
-    modelName = 'gemini-2.5-flash';
+  let modelName = (data.geminiModel || '').replace(/^models\//, '').trim();
+  if (!modelName || LEGACY_MODELS.has(modelName.toLowerCase())) {
+    modelName = 'gemini-2.5-pro';
     chrome.storage.local.set({ geminiModel: modelName });
   }
 
+  // Do not silently overwrite a model the user validated. Add it to the list instead.
+  ensureModelOption(modelName);
   if (modelSelect) {
     modelSelect.value = modelName;
   }
@@ -135,7 +159,11 @@ chrome.storage.local.get(['aiQuizEnabled', 'geminiApiKey', 'geminiModel'], (data
   }
 
   if (data.geminiApiKey) {
-    if (geminiApiKeyInput) geminiApiKeyInput.value = data.geminiApiKey;
+    const cleanStoredKey = sanitizeApiKey(data.geminiApiKey);
+    if (cleanStoredKey && cleanStoredKey !== data.geminiApiKey) {
+      chrome.storage.local.set({ geminiApiKey: cleanStoredKey });
+    }
+    if (geminiApiKeyInput) geminiApiKeyInput.value = cleanStoredKey || data.geminiApiKey;
     if (keyStatusText) {
       keyStatusText.textContent = `✓ Active (${formatModelName(modelName)})`;
       keyStatusText.className = 'key-status success';
@@ -159,15 +187,17 @@ if (modelSelect) {
       if (quizBadgeModelText) {
         quizBadgeModelText.textContent = formatted;
       }
-      addLog(`✨ Model set to ${formatted}`, 'done');
+      addLog(`Model set to ${formatted}`, 'done');
     });
   });
 }
 
 function updateAiCardState(enabled) {
-  if (!aiCardBody) return;
-  aiCardBody.style.opacity = enabled ? '1' : '0.45';
-  aiCardBody.style.pointerEvents = enabled ? 'auto' : 'none';
+  if (aiCardBody) aiCardBody.classList.toggle('is-off', !enabled);
+  if (engineState) {
+    engineState.textContent = enabled ? 'On' : 'Off';
+    engineState.classList.toggle('is-off', !enabled);
+  }
 }
 
 if (aiQuizToggle) {
@@ -175,7 +205,7 @@ if (aiQuizToggle) {
     const enabled = aiQuizToggle.checked;
     chrome.storage.local.set({ aiQuizEnabled: enabled });
     updateAiCardState(enabled);
-    addLog(enabled ? '✨ AI Assessment Solver enabled' : '⏸ AI Assessment Solver paused', 'running');
+    addLog(enabled ? 'AI assessment solver enabled' : 'AI assessment solver paused', 'running');
   });
 }
 
@@ -184,22 +214,119 @@ if (btnToggleKeyVis && geminiApiKeyInput) {
   btnToggleKeyVis.addEventListener('click', () => {
     const isPass = geminiApiKeyInput.type === 'password';
     geminiApiKeyInput.type = isPass ? 'text' : 'password';
+    btnToggleKeyVis.textContent = isPass ? 'Hide' : 'Show';
+  });
+}
+
+// ── API Key Sanitization & Direct Fallback Validator ─────────────────────────
+function sanitizeApiKey(input) {
+  if (!input || typeof input !== 'string') return '';
+  let cleaned = input.replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202F\u2060\uFEFF]/g, '');
+
+  const aizaMatch = cleaned.match(/AIza[A-Za-z0-9_-]{20,}/);
+  if (aizaMatch) {
+    return aizaMatch[0];
+  }
+
+  cleaned = cleaned.trim().replace(/^['"`]+|['"`]+$/g, '').replace(/\s+/g, '');
+
+  const wrappedAizaMatch = cleaned.match(/AIza[A-Za-z0-9_-]{20,}/);
+  if (wrappedAizaMatch) {
+    return wrappedAizaMatch[0];
+  }
+
+  return cleaned;
+}
+
+function isValidApiKeyFormat(key) {
+  const clean = sanitizeApiKey(key);
+  if (!clean || clean.length < 16 || clean.length > 256) return false;
+  return /^[A-Za-z0-9._-]+$/.test(clean);
+}
+
+/**
+ * Direct fallback check from the popup in case the service worker is asleep or
+ * reloading. Uses GET /v1beta/models which Google authenticates with the key.
+ */
+async function validateKeyDirectlyInPopup(cleanKey, targetModel) {
+  const preferred = [
+    'gemini-3.1-pro-preview',
+    'gemini-3-pro-preview',
+    'gemini-3-flash-preview',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-pro-latest',
+    'gemini-flash-latest'
+  ];
+
+  for (const ver of ['v1beta', 'v1']) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/${ver}/models?key=${encodeURIComponent(cleanKey)}`;
+      const res = await fetch(url, {
+        headers: { 'x-goog-api-key': cleanKey }
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const available = (data?.models || [])
+          .filter(m => {
+            const methods = m.supportedGenerationMethods || m.supportedActions || [];
+            return methods.length === 0 || methods.includes('generateContent');
+          })
+          .map(m => (m.name || '').replace(/^models\//, ''))
+          .filter(name => name.toLowerCase().includes('gemini'));
+
+        let chosen = targetModel || 'gemini-2.5-pro';
+        if (available.length > 0 && (!available.includes(chosen) || LEGACY_MODELS.has(chosen.toLowerCase()))) {
+          chosen = preferred.find(p => available.includes(p)) || available.find(m => m.includes('pro')) || available.find(m => m.includes('flash')) || available[0];
+        }
+        return { success: true, model: chosen, apiVersion: ver };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        const msg = errData?.error?.message || `HTTP ${res.status}`;
+        return { success: false, error: msg };
+      }
+    } catch (e) {
+      if (ver === 'v1') {
+        return { success: false, error: e.message || 'Network error' };
+      }
+    }
+  }
+
+  return { success: false, error: 'Failed to connect to Gemini API' };
+}
+
+if (geminiApiKeyInput) {
+  geminiApiKeyInput.addEventListener('input', () => {
+    const cleaned = sanitizeApiKey(geminiApiKeyInput.value);
+    if (cleaned && keyStatusText && keyStatusText.classList.contains('error')) {
+      keyStatusText.textContent = 'Key entered — click Save & test.';
+      keyStatusText.className = 'key-status';
+    }
+  });
+
+  geminiApiKeyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      btnSaveKey?.click();
+    }
   });
 }
 
 // ── Save & Test API Key ──────────────────────────────────────────────────────
 if (btnSaveKey && geminiApiKeyInput) {
   btnSaveKey.addEventListener('click', async () => {
-    const rawKey = geminiApiKeyInput.value.trim();
+    const rawKey = sanitizeApiKey(geminiApiKeyInput.value);
+    geminiApiKeyInput.value = rawKey;
+
     if (!rawKey) {
       keyStatusText.textContent = 'Please enter an API key.';
       keyStatusText.className = 'key-status error';
       return;
     }
 
-    // SECURITY: Validate key format before sending to background
-    if (!/^AIza[A-Za-z0-9_-]{31,45}$/.test(rawKey)) {
-      keyStatusText.textContent = '✕ Invalid format. Gemini keys start with "AIza" (~39 chars).';
+    if (!isValidApiKeyFormat(rawKey)) {
+      keyStatusText.textContent = '✕ Invalid format. Paste the full key from Google AI Studio.';
       keyStatusText.className = 'key-status error';
       addLog('✕ Invalid API key format', 'error');
       return;
@@ -209,18 +336,46 @@ if (btnSaveKey && geminiApiKeyInput) {
     const targetLabel = formatModelName(targetModel);
 
     btnSaveKey.disabled = true;
-    btnSaveKey.textContent = 'Testing...';
-    keyStatusText.textContent = `Testing key with ${targetLabel}...`;
-    keyStatusText.className = 'key-status';
+    btnSaveKey.textContent = 'Testing…';
+    keyStatusText.textContent = `Testing key with ${targetLabel}…`;
+    keyStatusText.className = 'key-status testing';
 
     try {
-      const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({
-          type: 'TEST_GEMINI_KEY',
-          apiKey: rawKey,
-          model: targetModel
-        }, resolve);
+      let response = await new Promise((resolve) => {
+        let settled = false;
+        let timer = null;
+
+        const finish = (result) => {
+          if (settled) return;
+          settled = true;
+          if (timer) clearTimeout(timer);
+          resolve(result ?? null);
+        };
+
+        timer = setTimeout(() => finish(null), 20000);
+
+        try {
+          chrome.runtime.sendMessage({
+            type: 'TEST_GEMINI_KEY',
+            apiKey: rawKey,
+            model: targetModel
+          }, (result) => {
+            void chrome.runtime.lastError;
+            finish(result);
+          });
+        } catch (_) {
+          finish(null);
+        }
       });
+
+      // Fallback to direct popup validation if the service worker did not respond
+      // or if an older service worker rejected a key that /models accepts.
+      if (!response || !response.success) {
+        const directRes = await validateKeyDirectlyInPopup(rawKey, targetModel);
+        if (directRes.success || !response) {
+          response = directRes;
+        }
+      }
 
       if (response && response.success) {
         const validatedModel = response.model || targetModel;
@@ -228,8 +383,9 @@ if (btnSaveKey && geminiApiKeyInput) {
         chrome.storage.local.set({
           geminiApiKey: rawKey,
           geminiModel: validatedModel,
-          geminiApiVersion: 'v1beta'
+          geminiApiVersion: response.apiVersion || 'v1beta'
         }, () => {
+          ensureModelOption(validatedModel);
           if (modelSelect) modelSelect.value = validatedModel;
           if (quizBadgeModelText) quizBadgeModelText.textContent = formatted;
           keyStatusText.textContent = `✓ Active (${formatted})`;
@@ -248,7 +404,7 @@ if (btnSaveKey && geminiApiKeyInput) {
       addLog(`✕ Network error during test: ${e.message}`, 'error');
     } finally {
       btnSaveKey.disabled = false;
-      btnSaveKey.textContent = 'Save & Test';
+      btnSaveKey.textContent = 'Save & test';
     }
   });
 }
@@ -265,9 +421,10 @@ const ICONS = {
 // ── Apply status state to UI ──────────────────────────────────────────────────
 function applyStatus(state, message, data = {}) {
   if (statusDot) statusDot.className  = `status-dot ${state}`;
-  if (statusCard) statusCard.className = `status-card ${state}`;
+  if (statusCard) statusCard.className = `status-card panel ${state}`;
   if (statusIcon) statusIcon.innerHTML = ICONS[state] || ICONS.idle;
   if (statusText) statusText.textContent = message;
+  if (statusState) statusState.textContent = state;
 
   const isActive = state === 'running' || state === 'paused';
   if (btnStart) btnStart.disabled = isActive;
@@ -276,18 +433,32 @@ function applyStatus(state, message, data = {}) {
 
   if (btnPause) {
     if (state === 'paused') {
-      btnPause.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> <span>Resume</span>`;
+      btnPause.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> <span>Resume</span>`;
     } else {
-      btnPause.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> <span>Pause</span>`;
+      btnPause.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> <span>Pause</span>`;
     }
   }
 
-  if (progressSection && data.total > 0) {
-    progressSection.style.display = 'flex';
-    const pct = Math.min(100, Math.round((data.completed / data.total) * 100));
+  if (data.total > 0) {
+    lastProgress = {
+      completed: Number.isFinite(data.completed) ? data.completed : 0,
+      total: data.total
+    };
+  }
+
+  const shownProgress = data.total > 0
+    ? lastProgress
+    : ((state === 'running' || state === 'paused') ? lastProgress : null);
+
+  if (progressSection && shownProgress && shownProgress.total > 0) {
+    progressSection.hidden = false;
+    const pct = Math.min(100, Math.round((shownProgress.completed / shownProgress.total) * 100));
     if (progressFill) progressFill.style.width = pct + '%';
-    if (progCount) progCount.textContent = `${data.completed} / ${data.total}`;
-    if (doneCount) doneCount.textContent = data.completed;
+    if (progCount) progCount.textContent = `${shownProgress.completed} / ${shownProgress.total}`;
+    if (doneCount) doneCount.textContent = shownProgress.completed;
+  } else if (progressSection) {
+    progressSection.hidden = true;
+    if (state === 'idle') lastProgress = null;
   }
 }
 
@@ -299,7 +470,16 @@ function addLog(text, type = 'running') {
 
   const entry = document.createElement('div');
   entry.className = `log-entry ${type}`;
-  entry.textContent = text;
+
+  const stamp = document.createElement('span');
+  stamp.className = 'log-time';
+  stamp.textContent = new Date().toLocaleTimeString('en-GB', { hour12: false });
+
+  const message = document.createElement('span');
+  message.className = 'log-msg';
+  message.textContent = text;
+
+  entry.append(stamp, message);
   logFeed.appendChild(entry);
   logFeed.scrollTop = logFeed.scrollHeight;
 
@@ -308,12 +488,18 @@ function addLog(text, type = 'running') {
   }
 }
 
-// ── Send action to content script ───────────────────────────────────────────
+// ── Send action to content scripts (all frames) ───────────────────────────────
 async function triggerSolverAction(action) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return;
+  if (!tab?.id) return;
 
+  // 1. Broadcast to every frame in the tab. This reaches an assessment inside
+  //    an iframe even if the service worker was restarted and lost its frame map.
   chrome.tabs.sendMessage(tab.id, { action }).catch(() => {});
+
+  // 2. Ask the service worker to dispatch to the known assessment frames too.
+  //    Content scripts ignore duplicate starts and repeated pause/resume actions.
+  chrome.runtime.sendMessage({ type: 'DISPATCH_ACTION', action }).catch(() => {});
 }
 
 // ── Button handlers ───────────────────────────────────────────────────────────
@@ -323,10 +509,18 @@ if (btnStart) {
       showNotice(false);
       return;
     }
+
+    const enteredKey = sanitizeApiKey(geminiApiKeyInput?.value || '');
+    if (enteredKey && isValidApiKeyFormat(enteredKey)) {
+      if (geminiApiKeyInput) geminiApiKeyInput.value = enteredKey;
+      await chrome.storage.local.set({ geminiApiKey: enteredKey });
+    }
+
     isPaused = false;
+    lastProgress = null;
     applyStatus('running', 'Launching Assessment Solver...');
     const activeName = formatModelName(modelSelect?.value || 'gemini-2.5-flash');
-    addLog(`▶ Launching AI Solver (${activeName})...`, 'running');
+    addLog(`Launching assessment solver (${activeName})...`, 'running');
     await triggerSolverAction('START');
   });
 }
@@ -336,11 +530,11 @@ if (btnPause) {
     isPaused = !isPaused;
     if (isPaused) {
       applyStatus('paused', 'Paused.');
-      addLog('⏸ Solver paused', 'paused');
+      addLog('Solver paused', 'paused');
       await triggerSolverAction('PAUSE');
     } else {
       applyStatus('running', 'Resumed.');
-      addLog('▶ Resumed solving', 'running');
+      addLog('Resumed solving', 'running');
       await triggerSolverAction('RESUME');
     }
   });
@@ -350,7 +544,7 @@ if (btnStop) {
   btnStop.addEventListener('click', async () => {
     isPaused = false;
     applyStatus('idle', 'Stopped.');
-    addLog('⏹ Solver stopped by user', 'error');
+    addLog('Solver stopped by user', 'error');
     await triggerSolverAction('STOP');
   });
 }
@@ -358,7 +552,7 @@ if (btnStop) {
 if (clearLogBtn) {
   clearLogBtn.addEventListener('click', () => {
     if (logFeed) {
-      logFeed.innerHTML = '<div class="log-entry idle">Log cleared. Ready.</div>';
+      logFeed.innerHTML = '<div class="log-entry idle">Activity cleared.</div>';
     }
   });
 }
@@ -366,12 +560,27 @@ if (clearLogBtn) {
 // ── Listen for status updates from content scripts ───────────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'STATUS_UPDATE') {
-    applyStatus(msg.status, msg.message, {
+    const displayState = msg.status === 'stopped' ? 'idle' : msg.status;
+
+    // The HUD (or another popup) can pause the solver too. Mirror its state so
+    // clicking the visible Resume button sends RESUME rather than PAUSE.
+    if (msg.status === 'paused') {
+      isPaused = true;
+    } else if (msg.status === 'running' || msg.status === 'stopped' || msg.status === 'done' || msg.status === 'error') {
+      isPaused = false;
+    }
+
+    const logType =
+      msg.status === 'paused'  ? 'skip'  :
+      msg.status === 'stopped' ? 'error' :
+      msg.status;
+
+    applyStatus(displayState, msg.message, {
       completed: msg.completed,
       total: msg.total,
       quizzes: msg.quizzes
     });
-    addLog(msg.message, msg.status);
+    addLog(msg.message, logType);
   }
 });
 
@@ -387,7 +596,27 @@ async function checkActivePage() {
     url.includes('springboard');
 
   if (pageGuard) {
-    pageGuard.style.display = isSpringboard ? 'none' : 'flex';
+    pageGuard.hidden = isSpringboard;
+  }
+
+  // Restore the last status from the service worker. This is the only reliable
+  // way to see a run that lives inside an assessment iframe.
+  try {
+    const bg = await chrome.runtime.sendMessage({ type: 'GET_TAB_STATUS', tabId: tab.id });
+    const last = bg?.status;
+    const age = last?.receivedAt ? Date.now() - last.receivedAt : Infinity;
+    if (last && last.status !== 'stopped' && last.status !== 'idle' && age < 30 * 60 * 1000) {
+      const logType =
+        last.status === 'paused' ? 'skip' :
+        last.status === 'error'  ? 'error' :
+        last.status;
+      applyStatus(last.status, last.message, last);
+      isPaused = last.status === 'paused';
+      if (last.message) addLog(last.message, logType);
+      return;
+    }
+  } catch (_) {
+    // Older service worker or extension reloaded; fall back to frame 0 below.
   }
 
   // Ask content script for current status

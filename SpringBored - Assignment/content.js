@@ -3,17 +3,58 @@
 // Powered by Google Gemini AI.
 
 (function () {
-  'use strict';
+  "use strict";
 
   // ─── State ────────────────────────────────────────────────────────────────
   let isRunning = false;
-  let isPaused  = false;
+  let isPaused = false;
+  let solverAbortedForFailure = false;
 
   // ─── Logging & Utilities ──────────────────────────────────────────────────
-  const log = (msg) => console.log(`%c[SpringBored Assignment] ${msg}`, 'color:#a855f7;font-weight:bold');
+  const log = (msg) =>
+    console.log(
+      `%c[SpringBored Assignment] ${msg}`,
+      "color:#e4601e;font-weight:bold",
+    );
 
   function sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  /** Ask the service worker for an answer without risking a permanent hang. */
+  function requestGeminiAnswer(payload, timeoutMs = 90000) {
+    return new Promise((resolve) => {
+      let settled = false;
+      let timer = null;
+
+      const finish = (response) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve(
+          response ?? {
+            success: false,
+            error: "No response from the background worker",
+          },
+        );
+      };
+
+      timer = setTimeout(() => {
+        finish({ success: false, error: "Gemini request timed out" });
+      }, timeoutMs);
+
+      try {
+        chrome.runtime.sendMessage(
+          { type: "SOLVE_QUIZ_QUESTION", ...payload },
+          (response) => {
+            void chrome.runtime.lastError;
+            finish(response);
+          },
+        );
+      } catch (e) {
+        finish({ success: false, error: e.message || "Message failed" });
+      }
+    });
   }
 
   // ─── Multi-Frame Document Crawler ─────────────────────────────────────────
@@ -21,13 +62,13 @@
   function getActiveDocuments() {
     const docs = [document];
     try {
-      const iframes = [...document.querySelectorAll('iframe')];
+      const iframes = [...document.querySelectorAll("iframe")];
       for (const f of iframes) {
         try {
           if (f.contentDocument && !docs.includes(f.contentDocument)) {
             docs.push(f.contentDocument);
             try {
-              const nested = [...f.contentDocument.querySelectorAll('iframe')];
+              const nested = [...f.contentDocument.querySelectorAll("iframe")];
               for (const nf of nested) {
                 if (nf.contentDocument && !docs.includes(nf.contentDocument)) {
                   docs.push(nf.contentDocument);
@@ -48,16 +89,21 @@
       if (findAttemptSectionButtons([d]).length > 0) return true;
       if (findStartButtons([d]).length > 0) return true;
       if (findSaveButton([d])) return true;
-      if (d.querySelector('input[type="radio"], [role="radio"], mat-radio-button, .circle, .q-num')) return true;
-
-      const txt = (d.body?.textContent || '').toLowerCase();
       if (
-        txt.includes('objective questions') ||
-        txt.includes('attempt section') ||
-        txt.includes('0 of 25 attempted') ||
-        txt.includes('finish test') ||
-        txt.includes('expand/collapse all sections') ||
-        txt.includes('total duration of the test')
+        d.querySelector(
+          'input[type="radio"], [role="radio"], mat-radio-button, .circle, .q-num',
+        )
+      )
+        return true;
+
+      const txt = (d.body?.textContent || "").toLowerCase();
+      if (
+        txt.includes("objective questions") ||
+        txt.includes("attempt section") ||
+        txt.includes("0 of 25 attempted") ||
+        txt.includes("finish test") ||
+        txt.includes("expand/collapse all sections") ||
+        txt.includes("total duration of the test")
       ) {
         return true;
       }
@@ -66,11 +112,38 @@
   }
 
   // ─── Status Communication ─────────────────────────────────────────────────
+  // Keep the last progress numbers so pause/resume/stop messages do not make
+  // the popup hide its progress panel.
+  let lastProgress = { completed: 0, total: 0 };
+
   function sendStatus(data) {
-    chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', ...data }).catch(() => {});
-    if (data.message && (isRunning || document.getElementById('springbored-assignment-hud'))) {
-      const prog = (data.completed !== undefined && data.total) ? `[${data.completed}/${data.total}]` : '';
-      createOrUpdateHud(data.message, prog, data.status === 'running');
+    if (Number.isFinite(data.total) && data.total > 0) {
+      lastProgress = {
+        completed: Number.isFinite(data.completed) ? data.completed : 0,
+        total: data.total,
+      };
+    }
+
+    const payload = { ...data };
+    if (payload.total === undefined && lastProgress.total > 0) {
+      payload.completed = Number.isFinite(payload.completed)
+        ? payload.completed
+        : lastProgress.completed;
+      payload.total = lastProgress.total;
+    }
+
+    chrome.runtime
+      .sendMessage({ type: "STATUS_UPDATE", ...payload })
+      .catch(() => {});
+    if (
+      payload.message &&
+      (isRunning || document.getElementById("springbored-assignment-hud"))
+    ) {
+      const prog =
+        payload.completed !== undefined && payload.total
+          ? `[${payload.completed}/${payload.total}]`
+          : "";
+      createOrUpdateHud(payload.message, prog, payload.status === "running");
     }
   }
 
@@ -78,72 +151,79 @@
   // FLOATING DRAGGABLE HUD (Bottom-Right by default, never hides Finish button)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  let currentCorner = 'bottom-right';
+  let currentCorner = "bottom-right";
   let isEnlarged = false;
   let autoScrollLogs = true;
+  let hudShortcutsBound = false;
+  let nextLogId = 1;
   const aiCommunicationLogs = [];
   let lastApiCallTime = 0;
   const MIN_API_INTERVAL_MS = 500;
 
   function formatModelName(modelCode) {
-    if (!modelCode) return 'Gemini AI';
-    const clean = String(modelCode).replace(/^models\//, '').trim();
-    if (clean === 'gemini-3.8-flash') return 'Gemini 3.8 Flash';
-    if (clean === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
-    if (clean === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
-    if (clean === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
-    if (clean === 'gemini-2.0-flash') return 'Gemini 2.0 Flash';
-    if (clean === 'gemini-1.5-pro') return 'Gemini 1.5 Pro';
-    if (clean === 'gemini-1.5-flash') return 'Gemini 1.5 Flash';
+    if (!modelCode) return "Gemini AI";
+    const clean = String(modelCode)
+      .replace(/^models\//, "")
+      .trim();
+    if (clean === "gemini-3.1-pro-preview") return "Gemini 3.1 Pro";
+    if (clean === "gemini-3-pro-preview") return "Gemini 3 Pro";
+    if (clean === "gemini-3-flash-preview") return "Gemini 3 Flash";
+    if (clean === "gemini-2.5-pro") return "Gemini 2.5 Pro";
+    if (clean === "gemini-2.5-flash") return "Gemini 2.5 Flash";
+    if (clean === "gemini-pro-latest") return "Gemini Pro Latest";
+    if (clean === "gemini-flash-latest") return "Gemini Flash Latest";
     return clean
-      .split('-')
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
   }
 
   function escapeHtml(str) {
-    if (!str) return '';
+    if (!str) return "";
     return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function renderLogCard(feed, entry) {
     if (!feed || !entry) return;
-    const card = document.createElement('div');
-    const qNum = entry.questionNumber || '?';
-    card.id = `sb-hud-card-q${qNum}`;
-    card.className = `sb-hud-card ${entry.status === 'success' ? 'success' : 'fallback'}`;
+    const card = document.createElement("div");
+    const qNum = entry.questionNumber || "?";
+    const cardId = `sb-hud-card-${entry.logId || qNum}`;
+    card.id = cardId;
+    card.className = `sb-hud-card ${entry.status === "success" ? "success" : "fallback"}`;
 
-    const optsHtml = (entry.options || []).map((opt, idx) => {
-      const isChosen = (entry.selectedIndices || []).includes(idx);
-      return `
-        <div class="sb-hud-stream-opt ${isChosen ? 'chosen' : ''}">
+    const optsHtml = (entry.options || [])
+      .map((opt, idx) => {
+        const isChosen = (entry.selectedIndices || []).includes(idx);
+        return `
+        <div class="sb-hud-stream-opt ${isChosen ? "chosen" : ""}">
           <span class="sb-hud-stream-idx">[${idx}]</span>
           <span class="sb-hud-stream-txt">${escapeHtml(opt)}</span>
-          ${isChosen ? '<span class="sb-hud-stream-check">✓ SELECTED</span>' : ''}
+          ${isChosen ? '<span class="sb-hud-stream-check">✓ SELECTED</span>' : ""}
         </div>
       `;
-    }).join('');
+      })
+      .join("");
 
     card.innerHTML = `
       <div class="sb-hud-card-top">
         <div class="sb-hud-card-qinfo">
           <span class="sb-hud-card-qbadge">Question #${qNum}</span>
-          <span class="sb-hud-card-time">${entry.timestamp || ''}</span>
+          <span class="sb-hud-card-time">${entry.timestamp || ""}</span>
         </div>
         <div class="sb-hud-card-perf">
-          <span class="sb-hud-card-latency">⚡ ${entry.latencyMs || 0}ms</span>
-          <span class="sb-hud-card-model">${formatModelName(entry.model || 'gemini-3.8-flash')}</span>
+          <span class="sb-hud-card-latency">${entry.latencyMs || 0} ms</span>
+          <span class="sb-hud-card-model">${formatModelName(entry.model || "Gemini")}</span>
         </div>
       </div>
 
       <div class="sb-hud-card-prompt">
         <div class="sb-hud-sublabel">PROMPT SENT TO GEMINI:</div>
-        <div class="sb-hud-prompt-text">${escapeHtml(entry.questionText || '')}</div>
+        <div class="sb-hud-prompt-text">${escapeHtml(entry.questionText || "")}</div>
       </div>
 
       <div class="sb-hud-card-options">
@@ -153,9 +233,9 @@
       <div class="sb-hud-card-reply">
         <div class="sb-hud-sublabel">GEMINI AI RESPONSE:</div>
         <div class="sb-hud-ans-highlight">
-          Selected Option: <strong>${escapeHtml(entry.selectedText || `[${(entry.selectedIndices || [0]).join(', ')}]`)}</strong>
+          Selected Option: <strong>${escapeHtml(entry.selectedText || `[${(entry.selectedIndices || [0]).join(", ")}]`)}</strong>
         </div>
-        ${entry.explanation ? `<div class="sb-hud-exp-text">💡 ${escapeHtml(entry.explanation)}</div>` : ''}
+        ${entry.explanation ? `<div class="sb-hud-exp-text">${escapeHtml(entry.explanation)}</div>` : ""}
       </div>
     `;
 
@@ -163,23 +243,26 @@
   }
 
   function updatePillsBar() {
-    const pillsBar = document.getElementById('sbHudPillsBar');
+    const pillsBar = document.getElementById("sbHudPillsBar");
     if (!pillsBar) return;
-    pillsBar.innerHTML = '';
+    pillsBar.innerHTML = "";
     aiCommunicationLogs.forEach((entry) => {
       const qNum = entry.questionNumber;
       if (!qNum) return;
-      const pill = document.createElement('button');
-      pill.className = 'sb-hud-q-pill';
+      const pill = document.createElement("button");
+      pill.className = "sb-hud-q-pill";
       pill.textContent = `Q${qNum}`;
       pill.title = `Jump to Question ${qNum}`;
-      pill.addEventListener('click', (e) => {
+      pill.dataset.target = `sb-hud-card-${entry.logId || qNum}`;
+      pill.addEventListener("click", (e) => {
         e.stopPropagation();
-        const card = document.getElementById(`sb-hud-card-q${qNum}`);
+        const card = document.getElementById(pill.dataset.target);
         if (card) {
-          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          [...pillsBar.querySelectorAll('.sb-hud-q-pill')].forEach(p => p.classList.remove('active'));
-          pill.classList.add('active');
+          card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          [...pillsBar.querySelectorAll(".sb-hud-q-pill")].forEach((p) =>
+            p.classList.remove("active"),
+          );
+          pill.classList.add("active");
         }
       });
       pillsBar.appendChild(pill);
@@ -187,15 +270,16 @@
   }
 
   function appendAiCommunicationLog(entry) {
+    entry.logId = nextLogId++;
     aiCommunicationLogs.push(entry);
     if (aiCommunicationLogs.length > 50) aiCommunicationLogs.shift();
 
-    const badge = document.getElementById('sbHudStreamBadge');
+    const badge = document.getElementById("sbHudStreamBadge");
     if (badge) badge.textContent = String(aiCommunicationLogs.length);
 
-    const feed = document.getElementById('sbHudStreamFeed');
-    const placeholder = document.getElementById('sbHudPlaceholder');
-    if (placeholder) placeholder.style.display = 'none';
+    const feed = document.getElementById("sbHudStreamFeed");
+    const placeholder = document.getElementById("sbHudPlaceholder");
+    if (placeholder) placeholder.style.display = "none";
 
     if (feed) {
       renderLogCard(feed, entry);
@@ -206,18 +290,22 @@
     }
   }
 
-  function createOrUpdateHud(statusText = 'Ready', progressText = '', isSolving = false) {
-    let hud = document.getElementById('springbored-assignment-hud');
+  function createOrUpdateHud(
+    statusText = "Ready",
+    progressText = "",
+    isSolving = false,
+  ) {
+    let hud = document.getElementById("springbored-assignment-hud");
     if (!hud) {
-      hud = document.createElement('div');
-      hud.id = 'springbored-assignment-hud';
+      hud = document.createElement("div");
+      hud.id = "springbored-assignment-hud";
       hud.innerHTML = `
         <div class="sb-hud-bar" id="sbHudBar">
           <div class="sb-hud-header" id="sbHudHeader" title="Drag to move anywhere">
             <div class="sb-hud-brand">
-              <span class="sb-hud-sparkle">⚡</span>
-              <span class="sb-hud-title">SpringBored AI</span>
-              <span class="sb-hud-model" id="sbHudModel">Gemini AI</span>
+              <span class="sb-hud-mark">SB</span>
+              <span class="sb-hud-title">SpringBored</span>
+              <span class="sb-hud-model" id="sbHudModel">Gemini</span>
             </div>
             <div class="sb-hud-header-tools">
               <button class="sb-hud-tool-btn" id="sbHudPosBtn" title="Switch Corner (Bottom-Right / Bottom-Left / Top-Left)">⇋</button>
@@ -234,7 +322,7 @@
             </div>
             <div class="sb-hud-actions">
               <button class="sb-hud-action-btn" id="sbHudActionBtn">
-                ⚡ Auto-Solve Assessment Now
+                Solve assessment
               </button>
             </div>
             <div class="sb-hud-stream-toggle-row">
@@ -262,47 +350,63 @@
               </div>
             </div>
           </div>
+          <div class="sb-hud-footer">
+            <a
+              class="sb-hud-footer-brand"
+              href="https://springbored.ojasdeshpande.in/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >SpringBored</a
+            >
+            <span>&copy;</span>
+            <span id="sbHudCopyrightYear">2026</span>
+            <a
+              href="https://www.ojasdeshpande.in/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Ojas Shailesh Deshpande</a
+            >
+          </div>
         </div>
       `;
 
-      const style = document.createElement('style');
+      const style = document.createElement("style");
       style.textContent = `
         #springbored-assignment-hud {
           position: fixed;
           bottom: 24px;
           right: 24px;
           z-index: 2147483647;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
           user-select: none;
           touch-action: none;
         }
         .sb-hud-bar {
-          background: rgba(15, 17, 26, 0.96);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          border: 1px solid rgba(139, 92, 246, 0.6);
-          border-radius: 12px;
-          padding: 10px 14px;
-          width: 310px;
-          box-shadow: 0 10px 32px rgba(0, 0, 0, 0.65), 0 0 16px rgba(139, 92, 246, 0.35);
-          color: #f8fafc;
+          background: linear-gradient(180deg, #0f192a 0%, #09101c 100%);
+          border: 1px solid #1f314d;
+          border-top: 2px solid #38bdf8;
+          border-radius: 10px;
+          padding: 11px 14px;
+          width: 316px;
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
+          color: #f1f5f9;
           display: flex;
           flex-direction: column;
-          gap: 8px;
-          transition: width 0.25s ease, max-height 0.25s ease;
+          gap: 9px;
+          transition: width 0.22s ease, max-height 0.22s ease;
         }
         #springbored-assignment-hud.sb-hud-enlarged .sb-hud-bar {
-          width: 530px;
+          width: 536px;
           max-width: calc(100vw - 36px);
-          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 24px rgba(139, 92, 246, 0.45);
+          box-shadow: 0 22px 54px rgba(0, 0, 0, 0.78);
         }
         .sb-hud-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
           cursor: grab;
-          padding-bottom: 2px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          padding-bottom: 7px;
+          border-bottom: 1px solid #1b2a42;
         }
         .sb-hud-header:active {
           cursor: grabbing;
@@ -310,47 +414,63 @@
         .sb-hud-brand {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 7px;
         }
-        .sb-hud-sparkle {
-          font-size: 13px;
+        .sb-hud-mark {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 20px;
+          height: 20px;
+          flex-shrink: 0;
+          border-radius: 5px;
+          background: linear-gradient(135deg, #38bdf8 0%, #f97316 100%);
+          color: #06101e;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 8.5px;
+          font-weight: 800;
+          letter-spacing: 0.3px;
         }
         .sb-hud-title {
+          color: #f1f5f9;
+          font-size: 13.5px;
           font-weight: 700;
-          font-size: 12.5px;
-          letter-spacing: -0.2px;
-          background: linear-gradient(135deg, #a78bfa, #c084fc);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
+          letter-spacing: -0.25px;
         }
         .sb-hud-model {
-          font-size: 9px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 8px;
           font-weight: 600;
-          background: rgba(168, 85, 247, 0.22);
-          color: #c084fc;
+          letter-spacing: 0.45px;
+          text-transform: uppercase;
+          background: rgba(56, 189, 248, 0.12);
+          color: #38bdf8;
           padding: 2px 6px;
-          border-radius: 99px;
-          border: 1px solid rgba(168, 85, 247, 0.35);
+          border-radius: 4px;
+          border: 1px solid rgba(56, 189, 248, 0.32);
         }
         .sb-hud-header-tools {
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 3px;
         }
         .sb-hud-tool-btn {
           background: transparent;
-          border: none;
-          color: #94a3b8;
+          border: 1px solid transparent;
+          color: #8b9bb4;
           cursor: pointer;
-          font-size: 12px;
-          font-weight: bold;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 11.5px;
+          font-weight: 700;
           padding: 2px 5px;
           border-radius: 4px;
           line-height: 1;
+          transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
         }
         .sb-hud-tool-btn:hover {
-          color: #ffffff;
-          background: rgba(255, 255, 255, 0.1);
+          color: #f1f5f9;
+          background: #152236;
+          border-color: #253957;
         }
         .sb-hud-content {
           display: flex;
@@ -360,20 +480,23 @@
         .sb-hud-status-row {
           display: flex;
           align-items: center;
-          gap: 6px;
-          font-size: 11px;
+          gap: 7px;
+          padding: 6px 8px;
+          background: #070d17;
+          border: 1px solid #17253a;
+          border-radius: 6px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 10.5px;
         }
         .sb-hud-dot {
           width: 7px;
           height: 7px;
           border-radius: 50%;
           background: #34d399;
-          box-shadow: 0 0 6px #34d399;
           flex-shrink: 0;
         }
         .sb-hud-dot.busy {
-          background: #a855f7;
-          box-shadow: 0 0 8px #a855f7;
+          background: #fb923c;
           animation: sb-pulse 1.2s infinite;
         }
         .sb-hud-status {
@@ -384,9 +507,10 @@
           text-overflow: ellipsis;
         }
         .sb-hud-progress {
-          font-size: 10.5px;
-          font-weight: 600;
+          font-size: 10px;
+          font-weight: 700;
           color: #38bdf8;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           flex-shrink: 0;
         }
         .sb-hud-actions {
@@ -395,73 +519,80 @@
           gap: 6px;
         }
         .sb-hud-action-btn {
-          background: linear-gradient(135deg, #7c3aed, #6366f1);
-          border: none;
-          border-radius: 8px;
-          color: #ffffff;
+          background: linear-gradient(180deg, #fb923c 0%, #f97316 100%);
+          border: 1px solid #fb923c;
+          border-radius: 6px;
+          color: #06101e;
           padding: 9px 12px;
           font-size: 12px;
-          font-weight: 600;
+          font-weight: 700;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
+          box-shadow: 0 3px 12px rgba(249, 115, 22, 0.28);
         }
         .sb-hud-action-btn:hover {
-          filter: brightness(1.12);
+          background: linear-gradient(180deg, #fdba74 0%, #fb923c 100%);
           transform: translateY(-1px);
+          box-shadow: 0 5px 16px rgba(249, 115, 22, 0.36);
         }
         .sb-hud-action-btn.active {
-          background: #ef4444;
-          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+          background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+          border-color: #fbbf24;
+          color: #06101e;
+          box-shadow: 0 3px 12px rgba(245, 158, 11, 0.28);
         }
         .sb-hud-stream-toggle-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding-top: 2px;
         }
         .sb-hud-stream-toggle-btn {
-          background: rgba(139, 92, 246, 0.12);
-          border: 1px solid rgba(139, 92, 246, 0.3);
-          color: #c084fc;
-          font-size: 10px;
+          background: #0c1524;
+          border: 1px solid #1e2f48;
+          color: #cbd5e1;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 9.5px;
           font-weight: 600;
-          padding: 3px 8px;
+          letter-spacing: 0.35px;
+          padding: 5px 8px;
           border-radius: 6px;
           cursor: pointer;
           display: flex;
           align-items: center;
-          gap: 5px;
+          gap: 6px;
           width: 100%;
           justify-content: center;
-          transition: all 0.2s;
+          transition: all 0.15s ease;
         }
         .sb-hud-stream-toggle-btn:hover {
-          background: rgba(139, 92, 246, 0.22);
-          border-color: rgba(139, 92, 246, 0.5);
-          color: #ffffff;
+          background: rgba(56, 189, 248, 0.1);
+          border-color: rgba(56, 189, 248, 0.45);
+          color: #f1f5f9;
         }
         .sb-hud-stream-dot {
           color: #34d399;
           font-size: 8px;
         }
         .sb-hud-stream-badge {
-          background: #7c3aed;
-          color: #ffffff;
-          padding: 1px 5px;
-          border-radius: 99px;
+          background: rgba(56, 189, 248, 0.16);
+          border: 1px solid rgba(56, 189, 248, 0.35);
+          color: #38bdf8;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          padding: 1px 6px;
+          border-radius: 4px;
           font-size: 9px;
+          font-weight: 700;
         }
         .sb-hud-inspector {
           display: flex;
           flex-direction: column;
           gap: 6px;
-          margin-top: 4px;
+          margin-top: 2px;
           padding-top: 8px;
-          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          border-top: 1px solid #1b2a42;
           max-height: 380px;
         }
         #springbored-assignment-hud.sb-hud-enlarged .sb-hud-inspector {
@@ -474,28 +605,31 @@
           padding: 0 2px;
         }
         .sb-hud-insp-tag {
-          font-size: 9px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 8.5px;
           font-weight: 700;
-          color: #a78bfa;
-          letter-spacing: 0.5px;
+          color: #38bdf8;
+          letter-spacing: 0.65px;
         }
         .sb-hud-insp-right {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 5px;
         }
         .sb-hud-insp-subbtn {
-          background: transparent;
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          color: #94a3b8;
+          background: #0c1524;
+          border: 1px solid #1e2f48;
+          color: #8b9bb4;
           border-radius: 4px;
           padding: 2px 6px;
-          font-size: 9.5px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 9px;
           cursor: pointer;
+          transition: color 0.15s ease, border-color 0.15s ease;
         }
         .sb-hud-insp-subbtn:hover {
-          color: #ffffff;
-          border-color: rgba(255, 255, 255, 0.35);
+          color: #f1f5f9;
+          border-color: #38bdf8;
         }
         .sb-hud-pills-bar {
           display: flex;
@@ -510,31 +644,32 @@
           height: 3px;
         }
         .sb-hud-pills-bar::-webkit-scrollbar-thumb {
-          background: rgba(168, 85, 247, 0.4);
-          border-radius: 99px;
+          background: #273c5c;
+          border-radius: 4px;
         }
         .sb-hud-q-pill {
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          color: #94a3b8;
-          font-size: 9.5px;
+          background: #0c1524;
+          border: 1px solid #1e2f48;
+          color: #8b9bb4;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 9px;
           font-weight: 600;
           padding: 2px 7px;
-          border-radius: 99px;
+          border-radius: 4px;
           cursor: pointer;
           white-space: nowrap;
-          transition: all 0.15s;
+          transition: all 0.15s ease;
         }
         .sb-hud-q-pill:hover {
-          background: rgba(168, 85, 247, 0.25);
-          color: #ffffff;
-          border-color: #a855f7;
+          background: rgba(56, 189, 248, 0.14);
+          color: #f1f5f9;
+          border-color: #38bdf8;
         }
         .sb-hud-q-pill.active {
-          background: #7c3aed;
-          color: #ffffff;
-          border-color: #a78bfa;
-          box-shadow: 0 0 8px rgba(124, 58, 237, 0.5);
+          background: #38bdf8;
+          color: #06101e;
+          border-color: #38bdf8;
+          font-weight: 700;
         }
         .sb-hud-stream-feed {
           overflow-y: auto;
@@ -548,23 +683,23 @@
           max-height: 470px;
         }
         .sb-hud-stream-feed::-webkit-scrollbar {
-          width: 5px;
+          width: 4px;
         }
         .sb-hud-stream-feed::-webkit-scrollbar-thumb {
-          background: rgba(168, 85, 247, 0.4);
-          border-radius: 99px;
+          background: #273c5c;
+          border-radius: 4px;
         }
         .sb-hud-stream-placeholder {
           font-size: 10.5px;
-          color: #64748b;
+          color: #5e708d;
           text-align: center;
           padding: 16px 8px;
           font-style: italic;
         }
         .sb-hud-card {
-          background: rgba(255, 255, 255, 0.035);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 8px;
+          background: #0b1322;
+          border: 1px solid #1b2b44;
+          border-radius: 6px;
           padding: 9px 11px;
           font-size: 11px;
           display: flex;
@@ -583,13 +718,15 @@
           justify-content: space-between;
         }
         .sb-hud-card-qbadge {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-weight: 700;
-          color: #c084fc;
-          font-size: 11px;
+          color: #fb923c;
+          font-size: 10.5px;
         }
         .sb-hud-card-time {
-          font-size: 9.5px;
-          color: #64748b;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 9px;
+          color: #5e708d;
           margin-left: 6px;
         }
         .sb-hud-card-perf {
@@ -598,8 +735,8 @@
           gap: 6px;
         }
         .sb-hud-card-latency {
-          font-size: 9.5px;
-          font-family: monospace;
+          font-size: 9px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           color: #38bdf8;
           background: rgba(56, 189, 248, 0.12);
           padding: 1px 5px;
@@ -607,7 +744,7 @@
         }
         .sb-hud-card-model {
           font-size: 9px;
-          color: #94a3b8;
+          color: #8b9bb4;
         }
         .sb-hud-card-prompt {
           display: flex;
@@ -615,13 +752,15 @@
           gap: 3px;
         }
         .sb-hud-sublabel {
-          font-size: 9px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 8.5px;
           font-weight: 700;
-          color: #64748b;
-          letter-spacing: 0.3px;
+          color: #5e708d;
+          letter-spacing: 0.4px;
         }
         .sb-hud-prompt-text {
-          background: rgba(0, 0, 0, 0.4);
+          background: #070d17;
+          border: 1px solid #152236;
           padding: 6px 8px;
           border-radius: 5px;
           color: #e2e8f0;
@@ -640,25 +779,27 @@
           display: flex;
           align-items: flex-start;
           gap: 6px;
-          padding: 3px 6px;
+          padding: 3.5px 7px;
           border-radius: 4px;
-          color: #94a3b8;
+          color: #8b9bb4;
           font-size: 10px;
-          background: rgba(0, 0, 0, 0.18);
+          background: #070d17;
+          border: 1px solid transparent;
         }
         .sb-hud-stream-opt.chosen {
-          background: rgba(34, 197, 94, 0.14);
-          border: 1px solid rgba(34, 197, 94, 0.35);
-          color: #86efac;
+          background: rgba(16, 185, 129, 0.13);
+          border-color: rgba(16, 185, 129, 0.35);
+          color: #a7f3d0;
           font-weight: 600;
         }
         .sb-hud-stream-idx {
-          color: #a855f7;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          color: #38bdf8;
           font-weight: 700;
           flex-shrink: 0;
         }
         .sb-hud-stream-opt.chosen .sb-hud-stream-idx {
-          color: #4ade80;
+          color: #34d399;
         }
         .sb-hud-stream-txt {
           flex: 1;
@@ -666,48 +807,80 @@
         }
         .sb-hud-stream-check {
           color: #34d399;
-          font-size: 9px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 8.5px;
           font-weight: 700;
           flex-shrink: 0;
         }
         .sb-hud-card-reply {
-          background: rgba(139, 92, 246, 0.1);
-          border: 1px solid rgba(139, 92, 246, 0.28);
-          border-radius: 6px;
+          background: rgba(56, 189, 248, 0.08);
+          border: 1px solid rgba(56, 189, 248, 0.25);
+          border-radius: 5px;
           padding: 7px 9px;
           display: flex;
           flex-direction: column;
           gap: 3px;
         }
         .sb-hud-ans-highlight {
-          color: #ffffff;
+          color: #f1f5f9;
           font-size: 11px;
         }
         .sb-hud-ans-highlight strong {
-          color: #a78bfa;
+          color: #38bdf8;
         }
         .sb-hud-exp-text {
           color: #cbd5e1;
           font-size: 10px;
           line-height: 1.35;
-          font-style: italic;
         }
         @keyframes sb-pulse {
           0% { transform: scale(0.95); opacity: 0.8; }
-          50% { transform: scale(1.25); opacity: 1; }
+          50% { transform: scale(1.2); opacity: 1; }
           100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .sb-hud-footer {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          gap: 4px;
+          margin-top: 2px;
+          padding-top: 8px;
+          border-top: 1px solid #1b2a42;
+          color: #8b9bb4;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 8.5px;
+          letter-spacing: 0.15px;
+        }
+        .sb-hud-footer a {
+          color: #cbd5e1;
+          text-decoration: none;
+          border-bottom: 1px solid rgba(139, 155, 180, 0.35);
+          transition: color 0.15s ease, border-color 0.15s ease;
+        }
+        .sb-hud-footer a:hover {
+          color: #38bdf8;
+          border-color: #38bdf8;
+        }
+        .sb-hud-footer-brand {
+          font-weight: 700;
+          color: #f1f5f9 !important;
         }
       `;
       (document.head || document.documentElement).appendChild(style);
       (document.body || document.documentElement).appendChild(hud);
 
+      const hudYear = document.getElementById("sbHudCopyrightYear");
+      if (hudYear) hudYear.textContent = String(new Date().getFullYear());
+
       // ── Make HUD Draggable ──
-      const header = document.getElementById('sbHudHeader');
+      const header = document.getElementById("sbHudHeader");
       let isDragging = false;
       let startX, startY, origLeft, origTop;
 
-      header.addEventListener('pointerdown', (e) => {
-        if (e.target.closest('button')) return;
+      header.addEventListener("pointerdown", (e) => {
+        if (e.target.closest("button")) return;
         isDragging = true;
         const rect = hud.getBoundingClientRect();
         startX = e.clientX;
@@ -716,45 +889,53 @@
         origTop = rect.top;
 
         // Switch to top/left positioning for exact dragging
-        hud.style.bottom = 'auto';
-        hud.style.right = 'auto';
+        hud.style.bottom = "auto";
+        hud.style.right = "auto";
         hud.style.left = `${origLeft}px`;
         hud.style.top = `${origTop}px`;
         header.setPointerCapture(e.pointerId);
       });
 
-      header.addEventListener('pointermove', (e) => {
+      header.addEventListener("pointermove", (e) => {
         if (!isDragging) return;
         const deltaX = e.clientX - startX;
         const deltaY = e.clientY - startY;
         const panelWidth = isEnlarged ? 540 : 325;
-        const newLeft = Math.max(10, Math.min(window.innerWidth - panelWidth, origLeft + deltaX));
-        const newTop  = Math.max(10, Math.min(window.innerHeight - 80, origTop + deltaY));
+        const newLeft = Math.max(
+          10,
+          Math.min(window.innerWidth - panelWidth, origLeft + deltaX),
+        );
+        const newTop = Math.max(
+          10,
+          Math.min(window.innerHeight - 80, origTop + deltaY),
+        );
         hud.style.left = `${newLeft}px`;
         hud.style.top = `${newTop}px`;
       });
 
-      header.addEventListener('pointerup', (e) => {
+      header.addEventListener("pointerup", (e) => {
         isDragging = false;
-        try { header.releasePointerCapture(e.pointerId); } catch (_) {}
+        try {
+          header.releasePointerCapture(e.pointerId);
+        } catch (_) {}
       });
 
       // ── Enlarge / Inspector Toggle ──
-      const expandBtn = document.getElementById('sbHudExpandBtn');
-      const toggleRowBtn = document.getElementById('sbHudStreamToggleBtn');
-      const inspector = document.getElementById('sbHudInspector');
+      const expandBtn = document.getElementById("sbHudExpandBtn");
+      const toggleRowBtn = document.getElementById("sbHudStreamToggleBtn");
+      const inspector = document.getElementById("sbHudInspector");
 
       function setEnlarged(enlarged) {
         isEnlarged = enlarged;
         if (isEnlarged) {
-          hud.classList.add('sb-hud-enlarged');
-          if (inspector) inspector.style.display = 'flex';
+          hud.classList.add("sb-hud-enlarged");
+          if (inspector) inspector.style.display = "flex";
           if (expandBtn) {
-            expandBtn.textContent = '⤡';
-            expandBtn.title = 'Shrink / Compact Window';
+            expandBtn.textContent = "⤡";
+            expandBtn.title = "Shrink / Compact Window";
           }
           if (toggleRowBtn) {
-            toggleRowBtn.style.background = 'rgba(139, 92, 246, 0.25)';
+            toggleRowBtn.style.background = "rgba(56, 189, 248, 0.14)";
           }
           // Ensure enlarged window does not overflow off right screen edge
           const rect = hud.getBoundingClientRect();
@@ -764,56 +945,56 @@
               hud.style.left = `${Math.max(10, curLeft - (rect.right - window.innerWidth + 20))}px`;
             }
           }
-          const feed = document.getElementById('sbHudStreamFeed');
+          const feed = document.getElementById("sbHudStreamFeed");
           if (feed && autoScrollLogs) {
             feed.scrollTop = feed.scrollHeight;
           }
         } else {
-          hud.classList.remove('sb-hud-enlarged');
-          if (inspector) inspector.style.display = 'none';
+          hud.classList.remove("sb-hud-enlarged");
+          if (inspector) inspector.style.display = "none";
           if (expandBtn) {
-            expandBtn.textContent = '⤢';
-            expandBtn.title = 'Enlarge & Inspect Live Gemini AI Communication';
+            expandBtn.textContent = "⤢";
+            expandBtn.title = "Enlarge & Inspect Live Gemini AI Communication";
           }
           if (toggleRowBtn) {
-            toggleRowBtn.style.background = 'rgba(139, 92, 246, 0.12)';
+            toggleRowBtn.style.background = "#0c1524";
           }
         }
       }
 
       if (expandBtn) {
-        expandBtn.addEventListener('click', (e) => {
+        expandBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           setEnlarged(!isEnlarged);
         });
       }
 
       if (toggleRowBtn) {
-        toggleRowBtn.addEventListener('click', (e) => {
+        toggleRowBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           setEnlarged(!isEnlarged);
         });
       }
 
       // Auto-scroll toggle
-      const autoScrollBtn = document.getElementById('sbHudAutoScrollBtn');
+      const autoScrollBtn = document.getElementById("sbHudAutoScrollBtn");
       if (autoScrollBtn) {
-        autoScrollBtn.addEventListener('click', (e) => {
+        autoScrollBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           autoScrollLogs = !autoScrollLogs;
-          autoScrollBtn.style.color = autoScrollLogs ? '#a855f7' : '#64748b';
-          autoScrollBtn.textContent = autoScrollLogs ? '↓ Auto' : 'Paused';
+          autoScrollBtn.style.color = autoScrollLogs ? "#38bdf8" : "#8b9bb4";
+          autoScrollBtn.textContent = autoScrollLogs ? "↓ Auto" : "Paused";
         });
       }
 
       // Clear logs button
-      const clearStreamBtn = document.getElementById('sbHudClearStreamBtn');
+      const clearStreamBtn = document.getElementById("sbHudClearStreamBtn");
       if (clearStreamBtn) {
-        clearStreamBtn.addEventListener('click', (e) => {
+        clearStreamBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           aiCommunicationLogs.length = 0;
           updatePillsBar();
-          const feed = document.getElementById('sbHudStreamFeed');
+          const feed = document.getElementById("sbHudStreamFeed");
           if (feed) {
             feed.innerHTML = `
               <div class="sb-hud-stream-placeholder" id="sbHudPlaceholder">
@@ -821,86 +1002,92 @@
               </div>
             `;
           }
-          const badge = document.getElementById('sbHudStreamBadge');
-          if (badge) badge.textContent = '0';
+          const badge = document.getElementById("sbHudStreamBadge");
+          if (badge) badge.textContent = "0";
         });
       }
 
       // ── Position Flip Button (Bottom-Right -> Bottom-Left -> Top-Left) ──
-      const posBtn = document.getElementById('sbHudPosBtn');
-      posBtn.addEventListener('click', (e) => {
+      const posBtn = document.getElementById("sbHudPosBtn");
+      posBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        hud.style.left = 'auto';
-        hud.style.top = 'auto';
-        hud.style.bottom = 'auto';
-        hud.style.right = 'auto';
+        hud.style.left = "auto";
+        hud.style.top = "auto";
+        hud.style.bottom = "auto";
+        hud.style.right = "auto";
 
-        if (currentCorner === 'bottom-right') {
-          currentCorner = 'bottom-left';
-          hud.style.bottom = '24px';
-          hud.style.left = '24px';
-        } else if (currentCorner === 'bottom-left') {
-          currentCorner = 'top-left';
-          hud.style.top = '24px';
-          hud.style.left = '24px';
+        if (currentCorner === "bottom-right") {
+          currentCorner = "bottom-left";
+          hud.style.bottom = "24px";
+          hud.style.left = "24px";
+        } else if (currentCorner === "bottom-left") {
+          currentCorner = "top-left";
+          hud.style.top = "24px";
+          hud.style.left = "24px";
         } else {
-          currentCorner = 'bottom-right';
-          hud.style.bottom = '24px';
-          hud.style.right = '24px';
+          currentCorner = "bottom-right";
+          hud.style.bottom = "24px";
+          hud.style.right = "24px";
         }
       });
 
       // ── Minimize Button ──
-      const minBtn = document.getElementById('sbHudMinBtn');
-      minBtn.addEventListener('click', (e) => {
+      const minBtn = document.getElementById("sbHudMinBtn");
+      minBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const content = document.getElementById('sbHudContent');
-        const isHidden = content.style.display === 'none';
-        content.style.display = isHidden ? 'flex' : 'none';
-        minBtn.textContent = isHidden ? '_' : '□';
+        const content = document.getElementById("sbHudContent");
+        const isHidden = content.style.display === "none";
+        content.style.display = isHidden ? "flex" : "none";
+        minBtn.textContent = isHidden ? "_" : "□";
       });
 
       // ── Close Button ──
-      const closeBtn = document.getElementById('sbHudCloseBtn');
-      closeBtn.addEventListener('click', (e) => {
+      const closeBtn = document.getElementById("sbHudCloseBtn");
+      closeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         hud.remove();
       });
 
       // ── Action Button ──
-      const initActionBtn = document.getElementById('sbHudActionBtn');
+      const initActionBtn = document.getElementById("sbHudActionBtn");
       if (initActionBtn) {
-        initActionBtn.addEventListener('click', (e) => {
+        initActionBtn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
           if (!isRunning) {
-            log('HUD Action Button Clicked! Starting solver...');
+            log("HUD action button pressed. Starting solver...");
             startAssessmentSolver();
           } else {
             isPaused = !isPaused;
-            createOrUpdateHud(isPaused ? 'Paused' : 'Solving...', '', !isPaused);
+            sendStatus({
+              status: isPaused ? "paused" : "running",
+              message: isPaused ? "Paused." : "Solving assessment...",
+            });
           }
         });
       }
 
-      // Keyboard shortcuts: Alt+S, Ctrl+Shift+S, F2
-      window.addEventListener('keydown', (e) => {
-        if (
-          (e.altKey && e.key.toLowerCase() === 's') ||
-          (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 's') ||
-          e.key === 'F2'
-        ) {
-          e.preventDefault();
-          initActionBtn?.click();
-        }
-      });
+      // Keyboard shortcuts are bound once; the HUD can be closed and recreated.
+      if (!hudShortcutsBound) {
+        hudShortcutsBound = true;
+        window.addEventListener("keydown", (e) => {
+          if (
+            (e.altKey && e.key.toLowerCase() === "s") ||
+            (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "s") ||
+            e.key === "F2"
+          ) {
+            e.preventDefault();
+            document.getElementById("sbHudActionBtn")?.click();
+          }
+        });
+      }
 
       // Re-populate historical stream logs if HUD was newly created
-      const streamFeed = document.getElementById('sbHudStreamFeed');
+      const streamFeed = document.getElementById("sbHudStreamFeed");
       if (streamFeed && aiCommunicationLogs.length > 0) {
-        const placeholder = document.getElementById('sbHudPlaceholder');
-        if (placeholder) placeholder.style.display = 'none';
-        const badge = document.getElementById('sbHudStreamBadge');
+        const placeholder = document.getElementById("sbHudPlaceholder");
+        if (placeholder) placeholder.style.display = "none";
+        const badge = document.getElementById("sbHudStreamBadge");
         if (badge) badge.textContent = String(aiCommunicationLogs.length);
         for (const item of aiCommunicationLogs) {
           renderLogCard(streamFeed, item);
@@ -909,13 +1096,13 @@
       }
     }
 
-    const statusEl = document.getElementById('sbHudStatus');
-    const progEl = document.getElementById('sbHudProg');
-    const dotEl = document.getElementById('sbHudDot');
-    const actionBtn = document.getElementById('sbHudActionBtn');
-    const modelEl = document.getElementById('sbHudModel');
+    const statusEl = document.getElementById("sbHudStatus");
+    const progEl = document.getElementById("sbHudProg");
+    const dotEl = document.getElementById("sbHudDot");
+    const actionBtn = document.getElementById("sbHudActionBtn");
+    const modelEl = document.getElementById("sbHudModel");
 
-    chrome.storage.local.get(['geminiModel'], (d) => {
+    chrome.storage.local.get(["geminiModel"], (d) => {
       if (modelEl && d.geminiModel) {
         modelEl.textContent = formatModelName(d.geminiModel);
       }
@@ -923,14 +1110,17 @@
 
     if (statusEl && statusText) statusEl.textContent = statusText;
     if (progEl) progEl.textContent = progressText;
-    if (dotEl) dotEl.className = isSolving ? 'sb-hud-dot busy' : 'sb-hud-dot';
+    if (dotEl) dotEl.className = isSolving ? "sb-hud-dot busy" : "sb-hud-dot";
     if (actionBtn) {
-      if (isSolving) {
-        actionBtn.textContent = '⏸ Pause AI Solving';
-        actionBtn.className = 'sb-hud-action-btn active';
+      if (isRunning && isPaused) {
+        actionBtn.textContent = "Resume solver";
+        actionBtn.className = "sb-hud-action-btn active";
+      } else if (isRunning) {
+        actionBtn.textContent = "Pause solver";
+        actionBtn.className = "sb-hud-action-btn active";
       } else {
-        actionBtn.textContent = '⚡ Auto-Solve Assessment Now';
-        actionBtn.className = 'sb-hud-action-btn';
+        actionBtn.textContent = "Solve assessment";
+        actionBtn.className = "sb-hud-action-btn";
       }
     }
   }
@@ -942,13 +1132,21 @@
   function findStartButtons(roots = getActiveDocuments()) {
     const results = [];
     for (const root of roots) {
-      const candidates = [...root.querySelectorAll('button, [role="button"], input[type="button"], a, div, span')];
+      const candidates = [
+        ...root.querySelectorAll(
+          'button, [role="button"], input[type="button"], a, div, span',
+        ),
+      ];
       for (const btn of candidates) {
-        if (btn.disabled || btn.hasAttribute('disabled')) continue;
-        const text = (btn.innerText || btn.textContent || btn.value || '').trim().replace(/\s+/g, ' ');
+        if (btn.disabled || btn.hasAttribute("disabled")) continue;
+        const text = (btn.innerText || btn.textContent || btn.value || "")
+          .trim()
+          .replace(/\s+/g, " ");
         if (
           /^(?:start|retake|re-attempt)$/i.test(text) ||
-          /^(?:start|retake|re-attempt)\s*(?:test|assessment|quiz)$/i.test(text) ||
+          /^(?:start|retake|re-attempt)\s*(?:test|assessment|quiz)$/i.test(
+            text,
+          ) ||
           /^(?:take\s*assessment)$/i.test(text)
         ) {
           const clickTarget = btn.closest('button, [role="button"], a') || btn;
@@ -963,12 +1161,23 @@
     const results = [];
     for (const root of roots) {
       // 1. Find ANY button, link, div, span with "Attempt Section" / "Resume Section"
-      const candidates = [...root.querySelectorAll('button, a, input[type="button"], [role="button"], div, span')];
+      const candidates = [
+        ...root.querySelectorAll(
+          'button, a, input[type="button"], [role="button"], div, span',
+        ),
+      ];
       for (const el of candidates) {
-        if (el.disabled || el.hasAttribute('disabled')) continue;
-        const rawTxt = (el.innerText || el.textContent || el.value || '').trim();
-        const txt = rawTxt.replace(/\s+/g, ' ');
-        const aria = (el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
+        if (el.disabled || el.hasAttribute("disabled")) continue;
+        const rawTxt = (
+          el.innerText ||
+          el.textContent ||
+          el.value ||
+          ""
+        ).trim();
+        const txt = rawTxt.replace(/\s+/g, " ");
+        const aria = (el.getAttribute("aria-label") || "")
+          .trim()
+          .replace(/\s+/g, " ");
 
         if (
           /^(?:attempt|resume|start)\s*section$/i.test(txt) ||
@@ -986,13 +1195,22 @@
       }
 
       // 2. Fallback: Search inside section card containers
-      const sectionCards = [...root.querySelectorAll('.section-card, .section, mat-card, tr, [class*="section"]')];
+      const sectionCards = [
+        ...root.querySelectorAll(
+          '.section-card, .section, mat-card, tr, [class*="section"]',
+        ),
+      ];
       for (const card of sectionCards) {
         const btns = [...card.querySelectorAll('button, [role="button"], a')];
         for (const b of btns) {
-          if (b.disabled || b.hasAttribute('disabled')) continue;
-          const bTxt = (b.innerText || b.textContent || '').trim().replace(/\s+/g, ' ');
-          if (/^(?:attempt|resume|start)$/i.test(bTxt) || /(?:attempt|resume)\s*section/i.test(bTxt)) {
+          if (b.disabled || b.hasAttribute("disabled")) continue;
+          const bTxt = (b.innerText || b.textContent || "")
+            .trim()
+            .replace(/\s+/g, " ");
+          if (
+            /^(?:attempt|resume|start)$/i.test(bTxt) ||
+            /(?:attempt|resume)\s*section/i.test(bTxt)
+          ) {
             if (!results.includes(b)) {
               const rect = b.getBoundingClientRect();
               if (rect.width > 0 && rect.height > 0) {
@@ -1006,15 +1224,69 @@
     return results;
   }
 
+  function sectionCardFor(button) {
+    let card = button.closest(
+      '.section-card, .section, mat-card, tr, [class*="section-card"], [class*="sectionCard"], [class*="assessment-section"]',
+    );
+    if (card) return card;
+
+    // Never use a generic div here: closest('div') matches the button's own
+    // wrapper and loses the section title/progress text.
+    const buttonText = (button.innerText || button.textContent || "")
+      .trim()
+      .toLowerCase();
+    let node = button.parentElement;
+    while (node && node !== document.body) {
+      const text = (node.innerText || node.textContent || "")
+        .trim()
+        .toLowerCase();
+      if (text.length > 30 && text !== buttonText) return node;
+      node = node.parentElement;
+    }
+    return button.parentElement;
+  }
+
+  function sectionNameFor(button) {
+    const card = sectionCardFor(button);
+    const text = card?.innerText || card?.textContent || "";
+    const firstLine =
+      text
+        .split("\n")
+        .map((line) => line.trim())
+        .find(Boolean) || "";
+    return firstLine.slice(0, 80) || "Unnamed section";
+  }
+
+  function isSectionCardComplete(card) {
+    const text = (card?.innerText || card?.textContent || "").toLowerCase();
+    if (/\b100\s*%/.test(text)) return true;
+    // Match a real status badge, not instructional copy such as "Complete all
+    // questions" or "Not completed".
+    return (
+      /^\s*(completed|complete)\s*$/im.test(text) ||
+      /^\s*(completed|complete)\s+(on|at|date)\b/im.test(text) ||
+      /^\s*status\s*[:\-]\s*(completed|complete)\s*$/im.test(text)
+    );
+  }
+
   function findSaveButton(roots = getActiveDocuments()) {
     for (const root of roots) {
       const candidates = [
-        ...root.querySelectorAll('button, input[type="button"], input[type="submit"], a, [role="button"], div, span')
+        ...root.querySelectorAll(
+          'button, input[type="button"], input[type="submit"], a, [role="button"], div, span',
+        ),
       ];
       for (const btn of candidates) {
-        if (btn.disabled || btn.hasAttribute('disabled')) continue;
-        const text = (btn.innerText || btn.textContent || btn.value || '').trim().toLowerCase();
-        if (text === 'save' || text === 'save & next' || text === 'save and next' || text === 'next') {
+        if (btn.disabled || btn.hasAttribute("disabled")) continue;
+        const text = (btn.innerText || btn.textContent || btn.value || "")
+          .trim()
+          .toLowerCase();
+        if (
+          text === "save" ||
+          text === "save & next" ||
+          text === "save and next" ||
+          text === "next"
+        ) {
           const rect = btn.getBoundingClientRect();
           if (rect.width > 0 && rect.height > 0) {
             return btn.closest('button, [role="button"], a') || btn;
@@ -1028,18 +1300,22 @@
   function findFinishButton(roots = getActiveDocuments()) {
     for (const root of roots) {
       const candidates = [
-        ...root.querySelectorAll('button, input[type="button"], a, [role="button"], div, span')
+        ...root.querySelectorAll(
+          'button, input[type="button"], a, [role="button"], div, span',
+        ),
       ];
       for (const btn of candidates) {
-        if (btn.disabled || btn.hasAttribute('disabled')) continue;
-        const text = (btn.innerText || btn.textContent || btn.value || '').trim().toLowerCase();
+        if (btn.disabled || btn.hasAttribute("disabled")) continue;
+        const text = (btn.innerText || btn.textContent || btn.value || "")
+          .trim()
+          .toLowerCase();
         if (
-          text === 'finish test' ||
-          text === 'finish' ||
-          text === 'end test' ||
-          text === 'submit test' ||
-          text === 'submit' ||
-          text === 'submit assessment'
+          text === "finish test" ||
+          text === "finish" ||
+          text === "end test" ||
+          text === "submit test" ||
+          text === "submit" ||
+          text === "submit assessment"
         ) {
           const rect = btn.getBoundingClientRect();
           if (rect.width > 0 && rect.height > 0) {
@@ -1054,22 +1330,26 @@
   function findBackButtonToSections(roots = getActiveDocuments()) {
     for (const root of roots) {
       const candidates = [
-        ...root.querySelectorAll('button, [role="button"], a, i, mat-icon, span, svg, div')
+        ...root.querySelectorAll(
+          'button, [role="button"], a, i, mat-icon, span, svg, div',
+        ),
       ];
       for (const el of candidates) {
-        const aria = (el.getAttribute('aria-label') || '').toLowerCase();
-        const cls  = (el.className?.toString() || '').toLowerCase();
-        const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+        const aria = (el.getAttribute("aria-label") || "").toLowerCase();
+        const cls = (el.className?.toString() || "").toLowerCase();
+        const text = (el.innerText || el.textContent || "")
+          .trim()
+          .toLowerCase();
 
         if (
-          aria.includes('back') ||
-          aria.includes('section') ||
-          cls.includes('back') ||
-          cls.includes('arrow-left') ||
-          text === 'arrow_back' ||
-          text === 'chevron_left' ||
-          text === '←' ||
-          text === '<'
+          aria.includes("back") ||
+          aria.includes("section") ||
+          cls.includes("back") ||
+          cls.includes("arrow-left") ||
+          text === "arrow_back" ||
+          text === "chevron_left" ||
+          text === "←" ||
+          text === "<"
         ) {
           const target = el.closest('button, a, [role="button"]') || el;
           const rect = target.getBoundingClientRect();
@@ -1080,9 +1360,11 @@
       }
 
       // Check for SECTIONS tab directly
-      const tabs = [...root.querySelectorAll('[role="tab"], .mat-tab-label, button, a')];
+      const tabs = [
+        ...root.querySelectorAll('[role="tab"], .mat-tab-label, button, a'),
+      ];
       for (const t of tabs) {
-        if (t.textContent.trim().toLowerCase() === 'sections') {
+        if (t.textContent.trim().toLowerCase() === "sections") {
           return t;
         }
       }
@@ -1093,12 +1375,34 @@
   function isElementRendered(el) {
     if (!el) return false;
     try {
-      const style = window.getComputedStyle(el);
-      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+      // Check the element and its ancestors. Angular keeps inactive question
+      // panels mounted; relying on the element's own style alone can scrape a
+      // question that is not on screen.
+      let node = el;
+      let depth = 0;
+      while (node && node.nodeType === 1 && depth < 14) {
+        const style = window.getComputedStyle(node);
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          style.visibility === "collapse" ||
+          parseFloat(style.opacity) === 0 ||
+          node.hidden ||
+          node.getAttribute("aria-hidden") === "true"
+        ) {
+          return false;
+        }
+        node = node.parentElement;
+        depth++;
+      }
+
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) return false;
       // Do not restrict by window.innerHeight: long questions/options scroll down below viewport height
-      return rect.right > 0 && rect.left < (window.innerWidth || document.documentElement.clientWidth);
+      return (
+        rect.right > 0 &&
+        rect.left < (window.innerWidth || document.documentElement.clientWidth)
+      );
     } catch (_) {
       return false;
     }
@@ -1106,13 +1410,26 @@
 
   function isCircleAnswered(circleEl) {
     if (!circleEl) return false;
-    const cls = (circleEl.className?.toString() || '').toLowerCase();
+    const cls = (circleEl.className?.toString() || "").toLowerCase();
+
+    // Explicitly reject unattempted / not-answered states!
     if (
-      cls.includes('answered') ||
-      cls.includes('completed') ||
-      cls.includes('attempted') ||
-      cls.includes('saved') ||
-      cls.includes('success')
+      cls.includes("not-") ||
+      cls.includes("not_") ||
+      cls.includes("unattempted") ||
+      cls.includes("unanswered") ||
+      cls.includes("not-answered") ||
+      cls.includes("not-attempted")
+    ) {
+      return false;
+    }
+
+    if (
+      /\banswered\b/.test(cls) ||
+      /\bcompleted\b/.test(cls) ||
+      /\battempted\b/.test(cls) ||
+      /\bsaved\b/.test(cls) ||
+      /\bsuccess\b/.test(cls)
     ) {
       return true;
     }
@@ -1124,7 +1441,7 @@
         const g = parseInt(m[2], 10);
         const b = parseInt(m[3], 10);
         // Green color indicator typical of correct/answered questions on Springboard
-        if (g > 90 && g > r * 1.2 && g > b * 1.2) {
+        if (g > 95 && g > r * 1.25 && g > b * 1.25) {
           return true;
         }
       }
@@ -1136,21 +1453,32 @@
     const list = [];
     for (const root of roots) {
       const candidates = [
-        ...root.querySelectorAll('.q-num, .circle, .question-number, .palette-item, .palette-circle, button, span, div, a')
+        ...root.querySelectorAll(
+          ".q-num, .circle, .question-number, .palette-item, .palette-circle, button, span, div, a",
+        ),
       ];
       for (const c of candidates) {
         if (c.children.length <= 1) {
           const txt = c.textContent.trim();
           if (/^\d{1,3}$/.test(txt)) {
             const rect = c.getBoundingClientRect();
-            // Sidebar palette is strictly on the left (x < 280), never in timer at top center/right
-            if (rect.width > 0 && rect.height > 0 && rect.left < 280 && rect.top > 60) {
+            // Sidebar palette is strictly on the left (x < 340), never in timer at top center/right
+            if (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              rect.left < 340 &&
+              rect.top > 60
+            ) {
               const num = parseInt(txt, 10);
-              if (num >= 1 && num <= 100 && !list.some(item => item.number === num)) {
+              if (
+                num >= 1 &&
+                num <= 100 &&
+                !list.some((item) => item.number === num)
+              ) {
                 list.push({
                   number: num,
                   element: c,
-                  answered: isCircleAnswered(c)
+                  answered: isCircleAnswered(c),
                 });
               }
             }
@@ -1164,11 +1492,17 @@
   function hasEnterResponseToast(roots = getActiveDocuments()) {
     for (const root of roots) {
       const toasts = [
-        ...root.querySelectorAll('.mat-snack-bar-container, simple-snack-bar, .toast, .alert, .snackbar, [role="alert"]')
+        ...root.querySelectorAll(
+          '.mat-snack-bar-container, simple-snack-bar, .toast, .alert, .snackbar, [role="alert"]',
+        ),
       ];
       for (const t of toasts) {
-        const text = (t.innerText || t.textContent || '').toLowerCase();
-        if (text.includes('enter your response') || text.includes('select an answer') || text.includes('mandatory')) {
+        const text = (t.innerText || t.textContent || "").toLowerCase();
+        if (
+          text.includes("enter your response") ||
+          text.includes("select an answer") ||
+          text.includes("mandatory")
+        ) {
           return true;
         }
       }
@@ -1181,17 +1515,67 @@
       await sleep(250);
       for (const root of roots) {
         const dialogs = [
-          ...root.querySelectorAll('mat-dialog-container, [role="dialog"], .modal, .modal-dialog, .cdk-overlay-pane')
+          ...root.querySelectorAll(
+            'mat-dialog-container, [role="dialog"], .modal, .modal-dialog, .cdk-overlay-pane',
+          ),
         ];
         for (const dialog of dialogs) {
-          const btns = [...dialog.querySelectorAll('button, [role="button"], a')];
+          const btns = [
+            ...dialog.querySelectorAll('button, [role="button"], a'),
+          ];
           for (const b of btns) {
-            const txt = (b.innerText || b.textContent || '').trim().toLowerCase();
+            const txt = (b.innerText || b.textContent || "")
+              .trim()
+              .toLowerCase();
             if (
-              (txt.includes('yes') || txt.includes('leave') || txt.includes('proceed') || txt.includes('back') || txt.includes('ok')) &&
-              !txt.includes('cancel') && !txt.includes('stay') && !txt.includes('no')
+              (txt.includes("yes") ||
+                txt.includes("leave") ||
+                txt.includes("proceed") ||
+                txt.includes("back") ||
+                txt.includes("ok")) &&
+              !txt.includes("cancel") &&
+              !txt.includes("stay") &&
+              !txt.includes("no")
             ) {
               log(`Confirming back-to-sections dialog: "${txt}"`);
+              b.click();
+              await sleep(600);
+              return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  async function confirmStartDialog(roots = getActiveDocuments()) {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await sleep(300);
+      for (const root of roots) {
+        const dialogs = [
+          ...root.querySelectorAll(
+            'mat-dialog-container, [role="dialog"], .modal, .cdk-overlay-pane',
+          ),
+        ];
+        for (const dialog of dialogs) {
+          const btns = [
+            ...dialog.querySelectorAll('button, [role="button"], a'),
+          ];
+          for (const b of btns) {
+            const txt = (b.innerText || b.textContent || "")
+              .trim()
+              .toLowerCase();
+            if (
+              (txt.includes("yes") ||
+                txt.includes("start") ||
+                txt.includes("proceed") ||
+                txt.includes("confirm") ||
+                txt.includes("ok")) &&
+              !txt.includes("cancel") &&
+              !txt.includes("no")
+            ) {
+              log(`Confirming start assessment dialog: "${txt}"`);
               b.click();
               await sleep(600);
               return true;
@@ -1206,13 +1590,20 @@
   function clickPaletteCircle(qIndex, roots = getActiveDocuments()) {
     for (const root of roots) {
       const candidates = [
-        ...root.querySelectorAll('.q-num, .circle, .question-number, .palette-item, .palette-circle, button, span, div, a')
+        ...root.querySelectorAll(
+          ".q-num, .circle, .question-number, .palette-item, .palette-circle, button, span, div, a",
+        ),
       ];
       for (const c of candidates) {
         if (c.children.length <= 1 && c.textContent.trim() === String(qIndex)) {
           const rect = c.getBoundingClientRect();
-          // Must be strictly in the left sidebar palette (x < 280, top > 60)
-          if (rect.width > 0 && rect.height > 0 && rect.left < 280 && rect.top > 60) {
+          // Must be strictly in the left sidebar palette (x < 340, top > 60)
+          if (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.left < 340 &&
+            rect.top > 60
+          ) {
             log(`Clicking palette circle ${qIndex}`);
             clickElementThoroughly(c);
             return true;
@@ -1226,12 +1617,17 @@
   function getCurrentQuestionNumber(roots = getActiveDocuments()) {
     for (const root of roots) {
       // 1. Heading or question indicator in main area (left > 150) — True current question on screen!
-      const candidates = [...root.querySelectorAll('.question-title, .question-number, h1, h2, h3, h4, h5, h6, div, span, p')];
+      const candidates = [
+        ...root.querySelectorAll(
+          ".question-title, .question-number, h1, h2, h3, h4, h5, h6, div, span, p",
+        ),
+      ];
       for (const el of candidates) {
         const txt = el.textContent.trim();
         if (txt.length > 0 && txt.length < 50) {
-          const match = txt.match(/^Question\s*[:\-\.]?\s*(\d{1,3})$/i) ||
-                        txt.match(/^Q(?:uestion)?\s*[:\-\.]?\s*(\d{1,3})\b/i);
+          const match =
+            txt.match(/^Question\s*[:\-\.]?\s*(\d{1,3})$/i) ||
+            txt.match(/^Q(?:uestion)?\s*[:\-\.]?\s*(\d{1,3})\b/i);
           if (match) {
             const rect = el.getBoundingClientRect();
             if (rect.left > 150 && rect.width > 0 && rect.height > 0) {
@@ -1242,17 +1638,23 @@
         }
       }
 
-      // 2. Fallback: Palette circle with strictly active class (sidebar left < 280)
+      // 2. Fallback: Palette circle with strictly active class (sidebar left < 340)
       const activeCircles = [
-        ...root.querySelectorAll('.active, .current, [aria-current="true"], .q-selected, .active-circle, .circle-active')
+        ...root.querySelectorAll(
+          '.active, .current, [aria-current="true"], .q-selected, .active-circle, .circle-active',
+        ),
       ];
       for (const ac of activeCircles) {
-        if (ac.classList.contains('answered') && !ac.classList.contains('active')) continue;
+        if (
+          ac.classList.contains("answered") &&
+          !ac.classList.contains("active")
+        )
+          continue;
         const txt = ac.textContent.trim();
         const m = txt.match(/^(\d{1,3})$/);
         if (m) {
           const rect = ac.getBoundingClientRect();
-          if (rect.left < 280 && rect.width > 0 && rect.height > 0) {
+          if (rect.left < 340 && rect.width > 0 && rect.height > 0) {
             const num = parseInt(m[1], 10);
             if (num >= 1 && num <= 100) return num;
           }
@@ -1272,7 +1674,7 @@
       }
       const qData = scrapeCurrentQuestion();
       if (qData) {
-        const newSig = `${newQNum || ''}|${qData.questionText}|${qData.options.map(o => o.text).join(',')}`;
+        const newSig = `${newQNum || ""}|${qData.questionText}|${qData.options.map((o) => o.text).join(",")}`;
         if (newSig !== prevSig) {
           return true;
         }
@@ -1287,7 +1689,7 @@
 
     // Secondary: Look for explicit total questions text e.g. "total 25 questions" within section
     for (const root of roots) {
-      const bodyText = root.body?.innerText || root.body?.textContent || '';
+      const bodyText = root.body?.innerText || root.body?.textContent || "";
       const m1 = bodyText.match(/total\s+(\d{1,3})\s+questions/i);
       if (m1) {
         const n = parseInt(m1[1], 10);
@@ -1301,249 +1703,502 @@
   function clickElementThoroughly(el) {
     if (!el) return;
     const target = el.closest('button, [role="button"], a') || el;
-    try { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+    try {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    } catch (_) {}
 
     const opts = { bubbles: true, cancelable: true, view: window };
-    target.dispatchEvent(new PointerEvent('pointerdown', opts));
-    target.dispatchEvent(new MouseEvent('mousedown', opts));
+    target.dispatchEvent(new PointerEvent("pointerdown", opts));
+    target.dispatchEvent(new MouseEvent("mousedown", opts));
     target.focus?.();
-    target.dispatchEvent(new PointerEvent('pointerup', opts));
-    target.dispatchEvent(new MouseEvent('mouseup', opts));
+    target.dispatchEvent(new PointerEvent("pointerup", opts));
+    target.dispatchEvent(new MouseEvent("mouseup", opts));
     target.click();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // QUESTION & OPTION SCRAPER (Targeting Strictly Visible Active Question)
+  // QUESTION & OPTION SCRAPER (Complete Stem, Code, Tables, and All Options)
   // ═══════════════════════════════════════════════════════════════════════════
+
+  const IGNORED_UI_SELECTOR =
+    '#springbored-assignment-hud, .palette, .question-palette, .palette-circle, .q-num, .circle, .sidebar, .left-sidebar, nav, .navbar, .modal-backdrop, .cdk-overlay-backdrop';
+
+  function isInsideIgnoredUi(el) {
+    if (!el || typeof el.closest !== 'function') return true;
+    return !!el.closest(IGNORED_UI_SELECTOR);
+  }
+
+  /**
+   * Walk up from a single option element to the highest wrapper that contains
+   * ONLY this option and none of the sibling options.
+   */
+  function findHighestSingleOptionWrapper(optNode, allOptNodes, rootBody) {
+    let current = optNode;
+    let parent = current?.parentElement;
+
+    while (parent && parent !== rootBody && parent.tagName !== 'BODY' && parent.tagName !== 'HTML') {
+      if (isInsideIgnoredUi(parent)) break;
+      const containsOtherOption = allOptNodes.some(
+        (other) => other !== optNode && parent.contains(other)
+      );
+      if (containsOtherOption) break;
+      current = parent;
+      parent = current.parentElement;
+    }
+
+    return current || optNode;
+  }
+
+  /**
+   * Walk a live DOM subtree and extract complete text while preserving
+   * multi-line <pre>/<code> indentation, <table> cells/rows, list items,
+   * and paragraph/line breaks, while skipping any node in excludedSet.
+   */
+  function extractRichTextFromNode(rootNode, excludedSet = new Set()) {
+    if (!rootNode) return '';
+
+    const BLOCK_TAGS = new Set([
+      'P', 'DIV', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'ASIDE',
+      'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'XMP',
+      'TABLE', 'TR', 'UL', 'OL', 'LI', 'DL', 'DT', 'DD', 'HR', 'FIGCAPTION'
+    ]);
+    const CODE_TAGS = new Set(['PRE', 'CODE', 'XMP']);
+    const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'PATH', 'META', 'LINK']);
+
+    function isExcluded(node) {
+      let cur = node;
+      while (cur && cur !== rootNode) {
+        if (excludedSet.has(cur)) return true;
+        cur = cur.parentElement;
+      }
+      return excludedSet.has(rootNode);
+    }
+
+    function walk(node) {
+      if (!node || isExcluded(node)) return '';
+
+      if (node.nodeType === Node.TEXT_NODE) {
+        const val = node.nodeValue || '';
+        const inPre = node.parentElement?.closest?.('pre, xmp, .code-block, .code-snippet');
+        return inPre ? val : val.replace(/[ \t\r\f\v]+/g, ' ');
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+      const el = node;
+      const tag = el.tagName.toUpperCase();
+      if (SKIP_TAGS.has(tag)) return '';
+      if (isInsideIgnoredUi(el)) return '';
+      if (!isElementRendered(el)) return '';
+
+      if (tag === 'BR') return '\n';
+
+      if (tag === 'IMG') {
+        const alt = (el.getAttribute('alt') || el.getAttribute('title') || '').trim();
+        if (alt && !/^(icon|logo|avatar|image|img)$/i.test(alt)) {
+          return ` [Image: ${alt}] `;
+        }
+        return '';
+      }
+
+      if (tag === 'TEXTAREA') {
+        const val = (el.value || el.textContent || '').trim();
+        return val ? `\n\`\`\`\n${val}\n\`\`\`\n` : '';
+      }
+
+      const isPreBlock =
+        tag === 'PRE' ||
+        tag === 'XMP' ||
+        el.classList?.contains('code-block') ||
+        el.classList?.contains('code-snippet');
+
+      if (isPreBlock) {
+        const rawCode = (el.innerText || el.textContent || '').replace(/\r\n/g, '\n').trim();
+        return rawCode ? `\n\`\`\`\n${rawCode}\n\`\`\`\n` : '';
+      }
+
+      if (tag === 'TABLE') {
+        const rows = [...el.querySelectorAll('tr')].filter((r) => !isExcluded(r));
+        const rowLines = rows
+          .map((row) => {
+            const cells = [...row.querySelectorAll('th, td')].filter((c) => !isExcluded(c));
+            return cells
+              .map((c) => (c.innerText || c.textContent || '').replace(/\s+/g, ' ').trim())
+              .filter(Boolean)
+              .join(' | ');
+          })
+          .filter(Boolean);
+        return rowLines.length > 0 ? `\n${rowLines.join('\n')}\n` : '';
+      }
+
+      let inner = '';
+      for (const child of el.childNodes) {
+        inner += walk(child);
+      }
+
+      if (CODE_TAGS.has(tag) && !el.closest('pre, xmp')) {
+        const trimmedCode = inner.trim();
+        if (!trimmedCode) return '';
+        return trimmedCode.includes('\n') ? `\n\`\`\`\n${trimmedCode}\n\`\`\`\n` : ` \`${trimmedCode}\` `;
+      }
+
+      if (tag === 'LI') {
+        const trimmedLi = inner.trim();
+        return trimmedLi ? `\n- ${trimmedLi}\n` : '';
+      }
+
+      if (BLOCK_TAGS.has(tag)) {
+        return `\n${inner.trim()}\n`;
+      }
+
+      return inner;
+    }
+
+    return walk(rootNode)
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  function cleanLeadingOptionEnumerator(text) {
+    if (!text) return '';
+    let cleaned = text.trim();
+    // Strip only explicit option prefixes like "(A) " or "A) " or "Option A: "
+    // Never strip "A - B" or "a.property"
+    const stripped = cleaned
+      .replace(/^(?:Option\s+[A-Za-z0-9]+[\.\)\:]\s+)/i, '')
+      .replace(/^\([A-Da-d1-9]\)\s+/, '')
+      .replace(/^[A-Da-d]\)\s+/, '')
+      .trim();
+    return stripped || cleaned;
+  }
+
+  function extractCompleteOptionText(wrapperEl, rawEl, inputEl, root) {
+    let text = '';
+
+    // 1. If input has an associated external <label for="id">, check it
+    if (inputEl?.id) {
+      try {
+        const explicitLbl = root.querySelector(`label[for="${CSS.escape(inputEl.id)}"]`);
+        if (explicitLbl) {
+          text = extractRichTextFromNode(explicitLbl);
+        }
+      } catch (_) {}
+    }
+
+    // 2. Extract from the full single-option wrapper
+    if (!text && wrapperEl) {
+      text = extractRichTextFromNode(wrapperEl);
+    }
+
+    // 3. Fallback to rawEl or label content selectors
+    if (!text && rawEl) {
+      const labelNode = rawEl.querySelector?.(
+        '.mat-radio-label-content, .mat-checkbox-label, .mdc-label, label'
+      );
+      text = extractRichTextFromNode(labelNode || rawEl);
+    }
+
+    // 4. Final fallback to innerText/textContent
+    if (!text) {
+      const target = wrapperEl || rawEl;
+      text = (target?.innerText || target?.textContent || '').trim();
+    }
+
+    return cleanLeadingOptionEnumerator(text);
+  }
+
+  /**
+   * Group candidate option elements by their shared container so we pick the
+   * complete option set belonging to the active question on screen.
+   */
+  function selectBestOptionGroup(elements, root) {
+    if (!elements || elements.length < 2) return [];
+
+    const groups = new Map();
+    for (const el of elements) {
+      const groupEl =
+        el.closest(
+          'mat-radio-group, [role="radiogroup"], .mat-mdc-radio-group, .options-container, .options-group, .question-options, .answer-options, .options, .choices, .answers, form, fieldset, ul, ol, tbody'
+        ) ||
+        el.parentElement?.parentElement ||
+        el.parentElement ||
+        root.body;
+
+      if (!groups.has(groupEl)) groups.set(groupEl, []);
+      groups.get(groupEl).push(el);
+    }
+
+    let bestGroup = [];
+    let bestScore = -1;
+
+    for (const [groupEl, items] of groups.entries()) {
+      if (items.length < 2) continue;
+      const rect = groupEl.getBoundingClientRect?.() || { left: 0, width: 0, height: 0 };
+      // Prefer groups in the main content area (further right than a left sidebar if present)
+      const areaBonus = Math.min(rect.width * rect.height, 250000) / 1000;
+      const positionBonus = rect.left > 140 ? 200 : 50;
+      const score = items.length * 100 + positionBonus + areaBonus;
+      if (score > bestScore) {
+        bestScore = score;
+        bestGroup = items;
+      }
+    }
+
+    return bestGroup.length >= 2 ? bestGroup : elements;
+  }
 
   function scrapeCurrentQuestion(roots = getActiveDocuments()) {
     for (const root of roots) {
-      let optionContainers = [];
+      if (!root?.body) continue;
+
+      let rawItems = [];
       let isMultipleSelect = false;
 
-      // ── Strategy A: Angular Material mat-radio-button (Single Choice) ──
-      const matRadios = [...root.querySelectorAll('mat-radio-button, [role="radio"]')].filter(mr => {
-        if (!isElementRendered(mr)) return false;
-        const rect = mr.getBoundingClientRect();
-        return rect.left > 160; // Must be in main question area, not in sidebar
-      });
+      // ── Strategy A: Angular Material / ARIA Radio Buttons ──
+      const matRadios = [
+        ...root.querySelectorAll('mat-radio-button, .mat-mdc-radio-button, [role="radio"]'),
+      ].filter((el) => isElementRendered(el) && !isInsideIgnoredUi(el));
 
-      // ── Strategy B: Angular Material mat-checkbox (Multiple Choice) ──
-      const matCheckboxes = [...root.querySelectorAll('mat-checkbox, [role="checkbox"]')].filter(mc => {
-        if (!isElementRendered(mc)) return false;
-        const rect = mc.getBoundingClientRect();
-        return rect.left > 160;
-      });
+      // ── Strategy B: Angular Material / ARIA Checkboxes ──
+      const matCheckboxes = [
+        ...root.querySelectorAll('mat-checkbox, .mat-mdc-checkbox, [role="checkbox"]'),
+      ].filter((el) => isElementRendered(el) && !isInsideIgnoredUi(el));
 
       if (matRadios.length >= 2) {
         isMultipleSelect = false;
-        optionContainers = matRadios.map((mr, idx) => {
-          const labelContent = mr.querySelector('.mat-radio-label-content');
-          let text = labelContent ? (labelContent.innerText || labelContent.textContent) : (mr.innerText || mr.textContent);
-          text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
-          const clickTarget = mr.querySelector('label') || mr;
-          return {
-            element: clickTarget,
-            container: mr,
-            inputElement: mr.querySelector('input'),
-            text,
-            isCheckbox: false
-          };
-        });
+        rawItems = selectBestOptionGroup(matRadios, root).map((mr) => ({
+          rawEl: mr,
+          clickTarget: mr.querySelector('label') || mr,
+          inputElement: mr.querySelector('input'),
+          isCheckbox: false,
+        }));
       } else if (matCheckboxes.length >= 2) {
         isMultipleSelect = true;
-        optionContainers = matCheckboxes.map((mc, idx) => {
-          const labelContent = mc.querySelector('.mat-checkbox-label, .mat-checkbox-layout');
-          let text = labelContent ? (labelContent.innerText || labelContent.textContent) : (mc.innerText || mc.textContent);
-          text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
-          const clickTarget = mc.querySelector('label') || mc;
-          return {
-            element: clickTarget,
-            container: mc,
-            inputElement: mc.querySelector('input'),
-            text,
-            isCheckbox: true
-          };
-        });
+        rawItems = selectBestOptionGroup(matCheckboxes, root).map((mc) => ({
+          rawEl: mc,
+          clickTarget: mc.querySelector('label') || mc,
+          inputElement: mc.querySelector('input'),
+          isCheckbox: true,
+        }));
       } else {
         // ── Strategy C: Native Checkbox Inputs ──
-        const nativeCheckboxes = [...root.querySelectorAll('input[type="checkbox"]')].filter(inp => {
-          const target = inp.closest('label, .checkbox, .option') || inp;
-          if (!isElementRendered(target)) return false;
-          return target.getBoundingClientRect().left > 160;
+        const nativeCheckboxes = [
+          ...root.querySelectorAll('input[type="checkbox"]'),
+        ].filter((inp) => {
+          const target = inp.closest('label, .checkbox, .option, .choice, li, div') || inp;
+          return isElementRendered(target) && !isInsideIgnoredUi(target);
         });
 
         // ── Strategy D: Native Radio Inputs ──
-        const nativeRadios = [...root.querySelectorAll('input[type="radio"]')].filter(inp => {
-          const target = inp.closest('label, .radio, .option') || inp;
-          if (!isElementRendered(target)) return false;
-          return target.getBoundingClientRect().left > 160;
+        const nativeRadios = [
+          ...root.querySelectorAll('input[type="radio"]'),
+        ].filter((inp) => {
+          const target = inp.closest('label, .radio, .option, .choice, li, div') || inp;
+          return isElementRendered(target) && !isInsideIgnoredUi(target);
         });
 
         if (nativeCheckboxes.length >= 2) {
           isMultipleSelect = true;
-          optionContainers = nativeCheckboxes.map((input, idx) => {
-            let text = '';
-            if (input.id) {
-              const lbl = root.querySelector(`label[for="${input.id}"]`);
-              if (lbl) text = lbl.innerText || lbl.textContent;
-            }
-            if (!text) {
-              const parentLbl = input.closest('label');
-              if (parentLbl) text = parentLbl.innerText || parentLbl.textContent;
-            }
-            if (!text && input.parentElement) {
-              text = input.parentElement.innerText || input.parentElement.textContent;
-            }
-            text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
-            const clickTarget = input.closest('label, mat-checkbox, .checkbox, .option') || input;
+          rawItems = selectBestOptionGroup(nativeCheckboxes, root).map((input) => {
+            const clickTarget =
+              input.closest('label, mat-checkbox, .checkbox, .option, .choice') || input;
             return {
-              element: clickTarget,
-              container: clickTarget,
+              rawEl: clickTarget,
+              clickTarget,
               inputElement: input,
-              text,
-              isCheckbox: true
+              isCheckbox: true,
             };
           });
         } else if (nativeRadios.length >= 2) {
           isMultipleSelect = false;
-          optionContainers = nativeRadios.map((input, idx) => {
-            let text = '';
-            if (input.id) {
-              const lbl = root.querySelector(`label[for="${input.id}"]`);
-              if (lbl) text = lbl.innerText || lbl.textContent;
-            }
-            if (!text) {
-              const parentLbl = input.closest('label');
-              if (parentLbl) text = parentLbl.innerText || parentLbl.textContent;
-            }
-            if (!text && input.parentElement) {
-              text = input.parentElement.innerText || input.parentElement.textContent;
-            }
-            text = (text || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
-            const clickTarget = input.closest('label, mat-radio-button, .radio, .option') || input;
+          rawItems = selectBestOptionGroup(nativeRadios, root).map((input) => {
+            const clickTarget =
+              input.closest('label, mat-radio-button, .radio, .option, .choice') || input;
             return {
-              element: clickTarget,
-              container: clickTarget,
+              rawEl: clickTarget,
+              clickTarget,
               inputElement: input,
-              text,
-              isCheckbox: false
+              isCheckbox: false,
             };
           });
         } else {
           // ── Strategy E: Custom Styled Choice Wrappers ──
-          const customWrappers = [...root.querySelectorAll('.custom-control-label, .mat-radio-label, .radio-label, .option, .choice')].filter(cw => {
-            if (!isElementRendered(cw)) return false;
-            return cw.getBoundingClientRect().left > 160;
-          });
+          const customWrappers = [
+            ...root.querySelectorAll(
+              '.custom-control-label, .mat-radio-label, .radio-label, .option-item, .answer-option, .option, .choice'
+            ),
+          ].filter((cw) => isElementRendered(cw) && !isInsideIgnoredUi(cw));
 
-          if (customWrappers.length >= 2 && customWrappers.length <= 8) {
-            optionContainers = customWrappers.map((cw, idx) => {
-              const text = (cw.innerText || cw.textContent || `Option ${idx + 1}`).replace(/\s+/g, ' ').replace(/^[A-Da-d][\.\)\-]\s+/, '').replace(/^\([A-Da-d]\)\s+/, '').trim();
-              return {
-                element: cw,
-                container: cw,
-                inputElement: cw.querySelector('input'),
-                text,
-                isCheckbox: false
-              };
-            });
+          if (customWrappers.length >= 2 && customWrappers.length <= 10) {
+            rawItems = selectBestOptionGroup(customWrappers, root).map((cw) => ({
+              rawEl: cw,
+              clickTarget: cw,
+              inputElement: cw.querySelector('input'),
+              isCheckbox: false,
+            }));
           }
         }
       }
 
-      if (optionContainers.length < 2) continue;
+      if (rawItems.length < 2) continue;
 
-      // ── Robust Question Stem & Code Extraction (Surgically Strip Options) ──
-      const firstOpt = optionContainers[0].element;
+      const allRawNodes = rawItems.map((item) => item.rawEl);
 
-      // Find the main question panel (the right pane on the screen, excluding sidebar palette)
-      let questionCard = firstOpt.closest(
-        '.question-container, .question-card, .test-question, .question-box, form, .question-body, div.col-md-9, div.col-md-10, div.col-sm-9, div.col-xs-12, mat-card'
-      );
+      // Build optionContainers with full single-option wrappers and complete option text
+      const optionContainers = rawItems.map((item, idx) => {
+        const wrapper = findHighestSingleOptionWrapper(item.rawEl, allRawNodes, root.body);
+        const text = extractCompleteOptionText(wrapper, item.rawEl, item.inputElement, root) || `Option ${idx + 1}`;
+        return {
+          element: item.clickTarget,
+          container: item.rawEl,
+          wrapper,
+          inputElement: item.inputElement,
+          text,
+          isCheckbox: item.isCheckbox,
+        };
+      });
 
-      if (!questionCard) {
-        let cur = firstOpt.parentElement;
-        while (cur && cur !== root.body) {
-          const rect = cur.getBoundingClientRect();
-          if (rect.width > 350 && rect.left > 180) {
-            questionCard = cur;
-            break;
-          }
-          cur = cur.parentElement;
+      // ── Find the Full Question Panel (Containing BOTH Stem/Code AND Options) ──
+      // Start from the lowest common ancestor of all option wrappers
+      let optionsLca = optionContainers[0].wrapper || optionContainers[0].element;
+      for (const opt of optionContainers) {
+        const node = opt.wrapper || opt.element;
+        while (optionsLca && node && !optionsLca.contains(node)) {
+          optionsLca = optionsLca.parentElement;
         }
       }
-      if (!questionCard) questionCard = firstOpt.parentElement?.parentElement?.parentElement || root.body;
+      if (!optionsLca) optionsLca = root.body;
 
-      // Collect code snippets (<pre>, <code>, <xmp>, etc.)
-      const codeEls = [...questionCard.querySelectorAll('pre, code, xmp, .code-snippet, .code-block, textarea')].filter(isElementRendered);
-      let codeSnippet = '';
-      if (codeEls.length > 0) {
-        codeSnippet = codeEls.map(c => (c.innerText || c.textContent || '').trim()).filter(Boolean).join('\n\n');
+      const excludedForQuestion = new Set();
+      for (const opt of optionContainers) {
+        if (opt.wrapper) excludedForQuestion.add(opt.wrapper);
+        if (opt.container) excludedForQuestion.add(opt.container);
+        if (opt.element) excludedForQuestion.add(opt.element);
       }
 
-      let questionText = '';
+      // Walk up from optionsLca to find the full question container that holds the
+      // complete question stem (never stopping on an options-only <form> or wrapper)
+      let questionCard = optionsLca;
+      let cur = optionsLca;
 
-      // Surgical DOM Clone Stripping: Remove all options, inputs, buttons, and palette elements
-      try {
-        const clone = questionCard.cloneNode(true);
+      while (cur && cur !== root.body && cur.tagName !== 'BODY' && cur.tagName !== 'HTML') {
+        const parent = cur.parentElement;
+        if (!parent || parent === root.body || parent.tagName === 'BODY') {
+          questionCard = cur;
+          break;
+        }
 
-        // Remove all option wrappers, radios, checkboxes, and choice labels
-        clone.querySelectorAll(
-          'mat-radio-group, mat-radio-button, mat-checkbox, [role="radio"], [role="checkbox"], .options, .options-group, .options-container, .answers, .choices, .option, .radio, .checkbox, input, label'
-        ).forEach(el => el.remove());
+        // Stop before an ancestor that merges the left sidebar question palette
+        const paletteInParent = parent.querySelectorAll(
+          '.palette-circle, .question-palette, .q-num, .circle'
+        );
+        if (paletteInParent.length >= 3) {
+          questionCard = cur;
+          break;
+        }
 
-        // Remove action buttons (Reset, Save, Next, Submit, Finish)
-        clone.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"], .actions, .action-buttons').forEach(el => el.remove());
-
-        // Remove sidebar, palette, timer, navigation headers, and icons
-        clone.querySelectorAll('.palette, .sidebar, .q-num, .circle, .palette-circle, .question-palette, .timer, .time-left, .header, .nav, .breadcrumb, [class*="fullscreen"]').forEach(el => el.remove());
-
-        let stripped = (clone.innerText || clone.textContent || '').trim();
-
-        // Strip "Question X" prefix
-        stripped = stripped.replace(/^Question\s*[:\-\.]?\s*\d+/i, '').trim();
-
-        // Strip assessment boilerplate
-        stripped = stripped
-          .replace(/OBJECTIVE QUESTIONS/gi, '')
-          .replace(/Assessment\s*-\s*[^\n]+/gi, '')
-          .replace(/\d+\s*:\s*\d+\s*:\s*\d+\s*(Hours|Minutes|Seconds)*/gi, '')
+        // Check how much non-option question text `cur` already has
+        const probeSet = new Set(excludedForQuestion);
+        cur
+          .querySelectorAll(
+            'button, [role="button"], input[type="button"], input[type="submit"], .actions, .action-buttons, .timer, .time-left'
+          )
+          .forEach((b) => probeSet.add(b));
+        const probeText = extractRichTextFromNode(cur, probeSet)
+          .replace(/^Question\s*[:\-\.]?\s*\d+\s*(?:of\s+\d+)?/i, '')
           .trim();
 
-        if (stripped.length > 5) {
-          questionText = stripped;
-        }
-      } catch (_) {}
+        const isKnownFullQuestionWrapper = cur.matches?.(
+          '.question-container, .question-view, .assessment-question, .question-card, .test-question, .question-panel'
+        );
 
-      // Fallback: If stripped clone was too short, extract text before first option
-      if (!questionText || questionText.length < 10) {
-        const fullText = (questionCard.innerText || questionCard.textContent || '');
-        const firstOptText = optionContainers[0].text;
-        const optIndex = fullText.indexOf(firstOptText);
-        if (optIndex > 10) {
-          questionText = fullText.slice(0, optIndex).replace(/^Question\s*[:\-\.]?\s*\d+/i, '').trim();
-        } else {
-          questionText = fullText.slice(0, 600).replace(/^Question\s*[:\-\.]?\s*\d+/i, '').trim();
+        if (isKnownFullQuestionWrapper && probeText.length >= 20) {
+          questionCard = cur;
+          break;
+        }
+
+        cur = parent;
+        questionCard = cur;
+      }
+
+      // Exclude action buttons, timers, headers, and option radio groups from question stem extraction
+      questionCard
+        .querySelectorAll(
+          'mat-radio-group, [role="radiogroup"], button, [role="button"], input[type="button"], input[type="submit"], .actions, .action-buttons, .timer, .time-left, .header, .breadcrumb, [class*="fullscreen"]'
+        )
+        .forEach((el) => {
+          // Only exclude mat-radio-group/[role=radiogroup] if it does not wrap the question stem itself
+          if (el.matches('mat-radio-group, [role="radiogroup"]')) {
+            excludedForQuestion.add(el);
+          } else if (!el.querySelector('pre, code')) {
+            excludedForQuestion.add(el);
+          }
+        });
+
+      let questionText = extractRichTextFromNode(questionCard, excludedForQuestion);
+
+      // Clean assessment boilerplate while keeping the entire question intact
+      questionText = questionText
+        .replace(/^Question\s*[:\-\.]?\s*\d+\s*(?:of\s+\d+)?[\s\:\.\-]*/i, '')
+        .replace(/^\d+\s+of\s+\d+\s+attempted\s*/i, '')
+        .replace(/^OBJECTIVE QUESTIONS\s*/i, '')
+        .replace(/\b\d{1,2}\s*:\s*\d{2}\s*:\s*\d{2}\s*(?:Hours|Minutes|Seconds|hrs|mins|secs)?\b/gi, '')
+        .trim();
+
+      // Ensure any <pre>/<code>/<xmp> blocks inside questionCard (outside options) are included
+      const questionCodeEls = [
+        ...questionCard.querySelectorAll('pre, code, xmp, .code-snippet, .code-block, textarea'),
+      ].filter((codeEl) => {
+        if (!isElementRendered(codeEl)) return false;
+        for (const opt of optionContainers) {
+          if (opt.wrapper?.contains(codeEl) || opt.container?.contains(codeEl)) return false;
+        }
+        return true;
+      });
+
+      for (const codeEl of questionCodeEls) {
+        const snippet = (codeEl.value || codeEl.innerText || codeEl.textContent || '').trim();
+        if (snippet && snippet.length > 3) {
+          const firstLine = snippet.split('\n')[0].trim();
+          if (firstLine && !questionText.includes(firstLine)) {
+            questionText = `${questionText}\n\n\`\`\`\n${snippet}\n\`\`\``;
+          }
         }
       }
 
-      // Attach any code snippet cleanly
-      if (codeSnippet && !questionText.includes(codeSnippet.slice(0, 25))) {
-        questionText = `${questionText}\n\n[Code]:\n${codeSnippet}`;
+      // Fallback if question stem is in a preceding sibling container outside questionCard
+      if (!questionText || questionText.length < 8) {
+        let prev = questionCard.previousElementSibling;
+        const siblingParts = [];
+        while (prev) {
+          if (isElementRendered(prev) && !isInsideIgnoredUi(prev)) {
+            const t = extractRichTextFromNode(prev, excludedForQuestion);
+            if (t) siblingParts.unshift(t);
+          }
+          prev = prev.previousElementSibling;
+        }
+        if (siblingParts.length > 0) {
+          questionText = `${siblingParts.join('\n\n')}\n\n${questionText}`.trim();
+        }
       }
 
       if (!isMultipleSelect) {
-        isMultipleSelect = optionContainers.some(o => o.isCheckbox) ||
-                           !!questionCard.querySelector('input[type="checkbox"], mat-checkbox, [role="checkbox"]') ||
-                           /all that apply|multiple correct/i.test(questionText);
+        isMultipleSelect =
+          optionContainers.some((o) => o.isCheckbox) ||
+          !!questionCard.querySelector(
+            'input[type="checkbox"], mat-checkbox, .mat-mdc-checkbox, [role="checkbox"]'
+          ) ||
+          /select all that apply|choose all that apply|multiple correct|more than one correct/i.test(
+            questionText
+          );
       }
 
       return {
-        questionText: questionText || 'Technical multiple choice question',
+        questionText: questionText || 'Multiple choice question',
         options: optionContainers,
         isMultipleSelect,
-        rootDocument: root
+        rootDocument: root,
       };
     }
 
@@ -1554,18 +2209,37 @@
   function selectOption(opt) {
     if (!opt) return false;
     const target = opt.element;
-    const isCheckbox = opt.isCheckbox || !!target.closest('mat-checkbox, [role="checkbox"], .checkbox');
-    const container = opt.container || target.closest(isCheckbox ? 'mat-checkbox, [role="checkbox"]' : 'mat-radio-button, [role="radio"]') || target;
-    const input = opt.inputElement || (target.tagName === 'INPUT' ? target : container.querySelector('input'));
-    const label = container.querySelector('label') || target;
+    const isCheckbox =
+      opt.isCheckbox ||
+      !!target.closest('mat-checkbox, [role="checkbox"], .checkbox');
+    const container =
+      opt.container ||
+      target.closest(
+        isCheckbox
+          ? 'mat-checkbox, [role="checkbox"]'
+          : 'mat-radio-button, [role="radio"]',
+      ) ||
+      target;
+    const input =
+      opt.inputElement ||
+      (target.tagName === "INPUT" ? target : container.querySelector("input"));
+    const label = container.querySelector("label") || target;
+
+    // Checkboxes toggle on every click. If this answer is already checked, leave
+    // it alone; clicking again would clear a correct selection on a retry.
+    if (isCheckbox && isOptionActuallyChecked(opt)) return true;
 
     try {
-      (container || target).scrollIntoView({ block: 'center', behavior: 'smooth' });
+      (container || target).scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
     } catch (_) {}
 
     // 1. ALWAYS thoroughly click the visible label / container FIRST.
     // In Angular Material and Springboard, the component listens for click on the host / label!
-    const primaryTarget = (label && label !== input) ? label : (container || target);
+    const primaryTarget =
+      label && label !== input ? label : container || target;
     clickElementThoroughly(primaryTarget);
 
     // 2. Also ensure the underlying input is clicked and checked for reactive forms
@@ -1577,8 +2251,8 @@
       if (!isCheckbox && !input.checked) {
         input.checked = true;
       }
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
     return true;
@@ -1587,13 +2261,14 @@
   function isOptionActuallyChecked(opt) {
     if (!opt) return false;
     const container = opt.container || opt.element;
-    const input = opt.inputElement || container?.querySelector?.('input');
+    const input = opt.inputElement || container?.querySelector?.("input");
     if (input && input.checked) return true;
-    if (container && (
-      container.classList?.contains('mat-radio-checked') ||
-      container.classList?.contains('mat-checkbox-checked') ||
-      container.getAttribute?.('aria-checked') === 'true'
-    )) {
+    if (
+      container &&
+      (container.classList?.contains("mat-radio-checked") ||
+        container.classList?.contains("mat-checkbox-checked") ||
+        container.getAttribute?.("aria-checked") === "true")
+    ) {
       return true;
     }
     return false;
@@ -1601,7 +2276,24 @@
 
   function isAnyOptionChecked(options) {
     if (!Array.isArray(options) || options.length === 0) return false;
-    return options.some(opt => isOptionActuallyChecked(opt));
+    return options.some((opt) => isOptionActuallyChecked(opt));
+  }
+
+  /**
+   * Multiple-select questions keep their checked state when the palette moves
+   * between questions. Clear anything the new answer does not include before
+   * applying Gemini's choice.
+   */
+  async function clearUnselectedCheckboxes(options, selectedIndices) {
+    const keep = new Set(selectedIndices);
+    for (let i = 0; i < options.length; i++) {
+      const opt = options[i];
+      if (!opt || !opt.isCheckbox || keep.has(i)) continue;
+      if (isOptionActuallyChecked(opt)) {
+        clickElementThoroughly(opt.element);
+        await sleep(80);
+      }
+    }
   }
 
   async function confirmSubmitDialog(roots = getActiveDocuments()) {
@@ -1609,20 +2301,33 @@
       await sleep(350);
       for (const root of roots) {
         const dialogs = [
-          ...root.querySelectorAll('mat-dialog-container, [role="dialog"], .modal, .modal-dialog, .cdk-overlay-pane')
+          ...root.querySelectorAll(
+            'mat-dialog-container, [role="dialog"], .modal, .modal-dialog, .cdk-overlay-pane',
+          ),
         ];
 
         for (const dialog of dialogs) {
           const rect = dialog.getBoundingClientRect();
           if (rect.width === 0 || rect.height === 0) continue;
 
-          const btns = [...dialog.querySelectorAll('button, [role="button"], a, input[type="button"]')];
+          const btns = [
+            ...dialog.querySelectorAll(
+              'button, [role="button"], a, input[type="button"]',
+            ),
+          ];
           for (const b of btns) {
-            if (b.disabled || b.hasAttribute('disabled')) continue;
-            const txt = (b.innerText || b.textContent || b.value || '').trim().toLowerCase();
+            if (b.disabled || b.hasAttribute("disabled")) continue;
+            const txt = (b.innerText || b.textContent || b.value || "")
+              .trim()
+              .toLowerCase();
             if (
-              (txt.includes('yes') || txt.includes('confirm') || txt.includes('submit') || txt.includes('finish') || txt.includes('ok')) &&
-              !txt.includes('cancel') && !txt.includes('no')
+              (txt.includes("yes") ||
+                txt.includes("confirm") ||
+                txt.includes("submit") ||
+                txt.includes("finish") ||
+                txt.includes("ok")) &&
+              !txt.includes("cancel") &&
+              !txt.includes("no")
             ) {
               log(`Confirming submit dialog button: "${txt}"`);
               b.click();
@@ -1640,60 +2345,140 @@
   // MAIN MULTI-SECTION ASSESSMENT SOLVER ENGINE
   // ═══════════════════════════════════════════════════════════════════════════
 
-  function acquireSolverLock() {
+  let solverLockHeld = false;
+  let isStarting = false;
+  let pendingStop = false;
+
+  /**
+   * The service worker owns the lock so separate frames cannot start two
+   * solvers at once. The in-window flag is only a fallback for worker restarts.
+   */
+  async function acquireSolverLock() {
     try {
-      const topWin = window.top || window;
-      if (topWin.__SPB_SOLVER_ACTIVE__) {
+      const res = await new Promise((resolve) => {
+        let settled = false;
+        let timer = null;
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          if (timer) clearTimeout(timer);
+          resolve(value);
+        };
+        timer = setTimeout(() => finish(null), 3000);
+        chrome.runtime.sendMessage({ type: "ACQUIRE_SOLVER_LOCK" }, (value) => {
+          void chrome.runtime.lastError;
+          finish(value ?? null);
+        });
+      });
+      if (res && res.granted === true) {
+        solverLockHeld = true;
+        return true;
+      }
+      if (res && res.granted === false) {
         return false;
       }
+    } catch (_) {}
+
+    try {
+      const topWin = window.top || window;
+      if (topWin.__SPB_SOLVER_ACTIVE__) return false;
       topWin.__SPB_SOLVER_ACTIVE__ = true;
+      solverLockHeld = true;
       return true;
     } catch (_) {
+      solverLockHeld = true;
       return true;
     }
   }
 
   function releaseSolverLock() {
+    if (!solverLockHeld) return;
+    solverLockHeld = false;
     try {
-      const topWin = window.top || window;
-      topWin.__SPB_SOLVER_ACTIVE__ = false;
+      chrome.runtime
+        .sendMessage({ type: "RELEASE_SOLVER_LOCK" })
+        .catch(() => {});
+    } catch (_) {}
+    try {
+      (window.top || window).__SPB_SOLVER_ACTIVE__ = false;
     } catch (_) {}
   }
 
   async function startAssessmentSolver() {
-    if (isRunning) return;
-    if (!acquireSolverLock()) {
-      log('Another frame is already executing the solver. Ignoring duplicate request.');
+    // isStarting closes the race between two START messages arriving before the
+    // async DOM check and lock request finish. Both would otherwise run.
+    if (isRunning || isStarting) return;
+    isStarting = true;
+    pendingStop = false;
+
+    // Only the frame that actually contains assessment UI may start. This stops
+    // the top frame from claiming the run when the test lives in an iframe.
+    let foundAssessment = hasAssessmentDom();
+    for (let i = 0; i < 10 && !foundAssessment; i++) {
+      await sleep(250);
+      foundAssessment = hasAssessmentDom();
+    }
+    if (!foundAssessment) {
+      log("No assessment interface in this frame; start ignored.");
+      isStarting = false;
+      return;
+    }
+
+    if (!(await acquireSolverLock())) {
+      log(
+        "Another frame is already executing the solver. Ignoring duplicate request.",
+      );
+      isStarting = false;
+      return;
+    }
+
+    // STOP can arrive while the DOM check or lock request is in flight.
+    if (pendingStop) {
+      log("Stop requested during startup. Solver did not start.");
+      pendingStop = false;
+      isStarting = false;
+      releaseSolverLock();
       return;
     }
 
     try {
-      log('🎯 Starting Gemini Assessment Solver...');
+      log("Starting Gemini assessment solver...");
       isRunning = true;
-      isPaused  = false;
-      sendStatus({ status: 'running', message: '🎯 Initializing Gemini AI...' });
+      isPaused = false;
+      solverAbortedForFailure = false;
+      lastProgress = { completed: 0, total: 0 };
+      sendStatus({ status: "running", message: "Initializing Gemini..." });
 
       const { aiQuizEnabled, geminiApiKey } = await chrome.storage.local.get([
-        'aiQuizEnabled',
-        'geminiApiKey'
+        "aiQuizEnabled",
+        "geminiApiKey",
       ]);
 
+      if (!isRunning) return;
+
       if (aiQuizEnabled === false || !geminiApiKey) {
-        const err = 'Gemini API Key missing! Paste your key in extension settings & click Save & Test.';
-        sendStatus({ status: 'error', message: err });
+        const err =
+          "Gemini API Key missing! Paste your key in extension settings & click Save & Test.";
+        sendStatus({ status: "error", message: err });
         return;
       }
 
       // ── STEP 1: Handle Instructions Screen (if Start / Retake button present) ──
       const startBtns = findStartButtons();
       if (startBtns.length > 0) {
-        log(`Clicking Start/Retake button: "${startBtns[0].textContent.trim()}"`);
+        log(
+          `Clicking Start/Retake button: "${startBtns[0].textContent.trim()}"`,
+        );
         clickElementThoroughly(startBtns[0]);
+        await confirmStartDialog();
         // Poll for up to 15 seconds for sections or questions to load
         for (let w = 0; w < 30; w++) {
           if (!isRunning) break;
           await sleep(500);
-          if (findAttemptSectionButtons().length > 0 || scrapeCurrentQuestion()) {
+          if (
+            findAttemptSectionButtons().length > 0 ||
+            scrapeCurrentQuestion()
+          ) {
             break;
           }
         }
@@ -1703,17 +2488,20 @@
       let totalQuestionsAnswered = 0;
       let sectionCount = 0;
       const completedSections = new Set();
+      const attemptedSections = new Set();
 
       while (isRunning) {
-        while (isPaused) { await sleep(400); }
+        while (isRunning && isPaused) {
+          await sleep(400);
+        }
 
         // Look for available "Attempt Section" / "Resume Section" buttons across all documents
-        let sectionButtons = findAttemptSectionButtons().filter(btn => {
-          const card = btn.closest('.section-card, .section, mat-card, tr, div') || btn.parentElement;
-          const name = (card?.innerText || card?.textContent || '').split('\n')[0].slice(0, 35).trim();
-          const cardText = (card?.innerText || card?.textContent || '').toLowerCase();
-          if (completedSections.has(name)) return false;
-          if (cardText.includes('100%') || /completed/i.test(cardText)) {
+        let sectionButtons = findAttemptSectionButtons().filter((btn) => {
+          const card = sectionCardFor(btn);
+          const name = sectionNameFor(btn);
+          if (completedSections.has(name) || attemptedSections.has(name))
+            return false;
+          if (isSectionCardComplete(card)) {
             completedSections.add(name);
             return false;
           }
@@ -1725,10 +2513,12 @@
           for (let r = 0; r < 10; r++) {
             if (!isRunning) break;
             await sleep(500);
-            sectionButtons = findAttemptSectionButtons().filter(btn => {
-              const card = btn.closest('.section-card, .section, mat-card, tr, div') || btn.parentElement;
-              const name = (card?.innerText || card?.textContent || '').split('\n')[0].slice(0, 35).trim();
-              return !completedSections.has(name);
+            sectionButtons = findAttemptSectionButtons().filter((btn) => {
+              const card = sectionCardFor(btn);
+              const name = sectionNameFor(btn);
+              if (completedSections.has(name) || attemptedSections.has(name))
+                return false;
+              return !isSectionCardComplete(card);
             });
             if (sectionButtons.length > 0 || scrapeCurrentQuestion()) break;
           }
@@ -1737,11 +2527,13 @@
         if (sectionButtons.length > 0) {
           sectionCount++;
           const currentSectionBtn = sectionButtons[0];
-          const sectionCard = currentSectionBtn.closest('.section-card, .section, mat-card, tr, div') || currentSectionBtn.parentElement;
-          const sectionName = (sectionCard?.innerText || sectionCard?.textContent || '').split('\n')[0].slice(0, 35).trim() || `Section ${sectionCount}`;
+          const sectionName = sectionNameFor(currentSectionBtn);
 
-          log(`▶ Entering Section ${sectionCount}: ${sectionName}...`);
-          sendStatus({ status: 'running', message: `Entering Section ${sectionCount}...` });
+          log(`Entering Section ${sectionCount}: ${sectionName}...`);
+          sendStatus({
+            status: "running",
+            message: `Entering Section ${sectionCount}...`,
+          });
 
           clickElementThoroughly(currentSectionBtn);
 
@@ -1758,12 +2550,15 @@
 
           if (questionReady) {
             // Solve all questions inside this section
-            const answeredInSection = await solveCurrentSectionQuestions(sectionName);
+            const answeredInSection =
+              await solveCurrentSectionQuestions(sectionName);
             totalQuestionsAnswered += answeredInSection;
             completedSections.add(sectionName);
 
             // Return back to Sections screen via Back Arrow or Sections Tab
-            log(`Section ${sectionName} complete (${answeredInSection} answered). Returning to Sections screen...`);
+            log(
+              `Section ${sectionName} complete (${answeredInSection} answered). Returning to Sections screen...`,
+            );
             const backBtn = findBackButtonToSections();
             if (backBtn) {
               clickElementThoroughly(backBtn);
@@ -1778,6 +2573,13 @@
             } else {
               await sleep(1500);
             }
+          } else if (isRunning) {
+            // Do not keep clicking the same unreadable section forever. Leave it
+            // unattempted so the submission guard still blocks finishing.
+            attemptedSections.add(sectionName);
+            log(
+              `Section "${sectionName}" did not render any readable questions. Moving on without submitting it.`,
+            );
           }
 
           continue;
@@ -1786,8 +2588,10 @@
         // If directly on a question screen without section buttons (single-section assessment):
         const qData = scrapeCurrentQuestion();
         if (qData) {
-          log('Single section assessment detected. Solving questions directly...');
-          const answered = await solveCurrentSectionQuestions('Assessment');
+          log(
+            "Single section assessment detected. Solving questions directly...",
+          );
+          const answered = await solveCurrentSectionQuestions("Assessment");
           totalQuestionsAnswered += answered;
         }
 
@@ -1795,29 +2599,52 @@
       }
 
       // ── STEP 3: Finish & Submit Test (SAFETY GUARDED) ──
-      if (totalQuestionsAnswered === 0) {
-        const msg = '⚠️ No questions were answered. Solver stopped without submitting to protect your score.';
+      if (solverAbortedForFailure) {
+        const msg =
+          "Solver stopped because Gemini did not return an answer. No guess was saved and the test was not submitted.";
         log(msg);
-        sendStatus({ status: 'stopped', message: msg });
+        sendStatus({ status: "error", message: msg });
+        return;
+      }
+
+      // A stop request while a section was being solved must never fall through
+      // to submission just because some answers were already saved.
+      if (!isRunning) {
+        log("Solver stopped before submission. Nothing was submitted.");
+        return;
+      }
+
+      if (totalQuestionsAnswered === 0) {
+        const msg =
+          "No questions were answered. Solver stopped without submitting to protect your score.";
+        log(msg);
+        sendStatus({ status: "stopped", message: msg });
         return;
       }
 
       // Block submission if unattempted sections remain!
-      const remainingSections = findAttemptSectionButtons().filter(btn => {
-        const card = btn.closest('.section-card, .section, mat-card, tr, div') || btn.parentElement;
-        const name = (card?.innerText || card?.textContent || '').split('\n')[0].slice(0, 35).trim();
-        return !completedSections.has(name);
+      const remainingSections = findAttemptSectionButtons().filter((btn) => {
+        const card = sectionCardFor(btn);
+        const name = sectionNameFor(btn);
+        if (completedSections.has(name)) return false;
+        if (isSectionCardComplete(card)) return false;
+        return true;
       });
 
       if (remainingSections.length > 0) {
-        const warn = `⚠️ ${remainingSections.length} section(s) still remain unattempted! Submission blocked to protect your score.`;
+        const warn = `${remainingSections.length} section(s) still remain unattempted. Submission blocked to protect your score.`;
         log(warn);
-        sendStatus({ status: 'stopped', message: warn });
+        sendStatus({ status: "stopped", message: warn });
         return;
       }
 
-      log(`All questions solved (${totalQuestionsAnswered} answered across ${sectionCount || 1} section(s)). Submitting assessment...`);
-      sendStatus({ status: 'running', message: 'Submitting completed assessment...' });
+      log(
+        `All questions solved (${totalQuestionsAnswered} answered across ${sectionCount || 1} section(s)). Submitting assessment...`,
+      );
+      sendStatus({
+        status: "running",
+        message: "Submitting completed assessment...",
+      });
       await sleep(1500);
 
       const finishBtn = findFinishButton();
@@ -1828,17 +2655,19 @@
         await confirmSubmitDialog();
       }
 
-      const finalMsg = `🎉 Assessment complete! Solved ${totalQuestionsAnswered} questions across ${sectionCount || 1} section(s).`;
+      const finalMsg = `Assessment complete. Solved ${totalQuestionsAnswered} questions across ${sectionCount || 1} section(s).`;
       log(finalMsg);
       sendStatus({
-        status: 'done',
+        status: "done",
         message: finalMsg,
         completed: totalQuestionsAnswered,
         total: totalQuestionsAnswered,
-        quizzes: 1
+        quizzes: 1,
       });
     } finally {
       isRunning = false;
+      isStarting = false;
+      pendingStop = false;
       releaseSolverLock();
     }
   }
@@ -1847,7 +2676,7 @@
   // SECTION QUESTION SOLVER
   // ═══════════════════════════════════════════════════════════════════════════
 
-  async function solveCurrentSectionQuestions(sectionName = 'Section') {
+  async function solveCurrentSectionQuestions(sectionName = "Section") {
     // Detect all question circles in the left sidebar palette
     let circles = getAvailablePaletteCircles();
     let totalQuestions = circles.length;
@@ -1856,7 +2685,9 @@
       // Fallback: Check for total text e.g. "total 25 questions" or "X of Y attempted"
       const allDocs = getActiveDocuments();
       for (const d of allDocs) {
-        const matchTotal = (d.body?.textContent || '').match(/(\d+)\s+of\s+(\d+)\s+attempted/i);
+        const matchTotal = (d.body?.textContent || "").match(
+          /(\d+)\s+of\s+(\d+)\s+attempted/i,
+        );
         if (matchTotal) {
           totalQuestions = parseInt(matchTotal[2], 10);
           break;
@@ -1865,16 +2696,27 @@
       if (!totalQuestions) totalQuestions = 25;
     }
 
-    log(`[${sectionName}] Questions detected: ${totalQuestions} (${circles.length > 0 ? circles.map(c => c.number).join(', ') : 'sequential'})`);
+    log(
+      `[${sectionName}] Questions detected: ${totalQuestions} (${circles.length > 0 ? circles.map((c) => c.number).join(", ") : "sequential"})`,
+    );
 
     const answeredSet = new Set();
     let questionsSolvedCount = 0;
+    let lastScrapedSignature = '';
+
+    function buildScrapeSignature(q) {
+      if (!q || !q.questionText || !Array.isArray(q.options)) return '';
+      return `${q.questionText.trim()}||${q.options.map((o) => (o.text || '').trim()).join('||')}`;
+    }
 
     // Palette-driven solving (guarantees every single question is visited & answered)
     if (circles.length > 0) {
       for (let i = 0; i < circles.length; i++) {
         if (!isRunning) break;
-        while (isPaused) { await sleep(300); }
+        while (isRunning && isPaused) {
+          await sleep(300);
+        }
+        if (!isRunning) break;
 
         // Refresh circle list
         circles = getAvailablePaletteCircles();
@@ -1893,36 +2735,58 @@
         log(`[${sectionName}] Navigating to Question ${qNum}...`);
         clickElementThoroughly(cInfo.element);
 
-        // Wait up to 5 seconds for question DOM to reflect this question
+        // Wait until the question DOM has updated AND stabilized across two checks
         let qData = null;
-        for (let w = 0; w < 15; w++) {
-          await sleep(300);
-          const curNum = getCurrentQuestionNumber();
-          qData = scrapeCurrentQuestion();
-          if (qData && (curNum === qNum || curNum === null)) {
+        let prevCandidateSig = '';
+        for (let w = 0; w < 22; w++) {
+          await sleep(220);
+          const candidate = scrapeCurrentQuestion();
+          if (!candidate || !candidate.options || candidate.options.length < 2) {
+            prevCandidateSig = '';
+            continue;
+          }
+          const candSig = buildScrapeSignature(candidate);
+          // If we already scraped a previous question, wait until the DOM actually switches
+          // (unless we have waited > 2.6s and the exam legitimately has a duplicate question).
+          if (lastScrapedSignature && candSig === lastScrapedSignature && w < 12) {
+            if (w === 5 || w === 9) {
+              clickElementThoroughly(cInfo.element);
+            }
+            prevCandidateSig = '';
+            continue;
+          }
+          // Require two consecutive identical scrapes so we never read a half-updated DOM
+          if (candSig && candSig === prevCandidateSig) {
+            qData = candidate;
             break;
           }
+          prevCandidateSig = candSig;
+          qData = candidate;
         }
 
         if (!qData || !qData.options || qData.options.length < 2) {
-          log(`⚠️ Retrying palette circle for Question ${qNum}...`);
+          log(`Retrying palette circle for Question ${qNum}...`);
           clickElementThoroughly(cInfo.element);
           await sleep(800);
           qData = scrapeCurrentQuestion();
         }
 
         if (!qData || !qData.options || qData.options.length < 2) {
-          log(`⚠️ Unable to scrape Question ${qNum}. Advancing.`);
+          log(`Unable to scrape Question ${qNum}. Advancing.`);
           continue;
         }
 
-        log(`[${qNum}/${totalQuestions}] Asking Gemini AI: "${qData.questionText.slice(0, 48)}..." (Type: ${qData.isMultipleSelect ? 'Multiple' : 'Single'})`);
+        lastScrapedSignature = buildScrapeSignature(qData);
+
+        log(
+          `[${qNum}/${totalQuestions}] Asking Gemini AI (${qData.options.length} options, Type: ${qData.isMultipleSelect ? 'Multiple' : 'Single'}): "${qData.questionText.slice(0, 80)}..."`
+        );
         sendStatus({
-          status: 'running',
+          status: "running",
           message: `[${qNum}/${totalQuestions}] Gemini: ${qData.questionText.slice(0, 34)}...`,
           completed: answeredSet.size,
           total: totalQuestions,
-          quizzes: 1
+          quizzes: 1,
         });
 
         // ── Call Gemini AI (with rate limit guard) ──
@@ -1934,66 +2798,92 @@
         lastApiCallTime = Date.now();
 
         const startTime = performance.now();
-        const geminiRes = await new Promise(resolve => {
-          chrome.runtime.sendMessage({
-            type: 'SOLVE_QUIZ_QUESTION',
-            question: qData.questionText,
-            options: qData.options.map(o => o.text),
-            isMultipleSelect: qData.isMultipleSelect
-          }, resolve);
+        const geminiRes = await requestGeminiAnswer({
+          question: qData.questionText,
+          options: qData.options.map((o) => o.text),
+          isMultipleSelect: qData.isMultipleSelect,
         });
         const latencyMs = Math.round(performance.now() - startTime);
 
-        let selectedIndices = [0];
-        let selectedText = '';
-        if (geminiRes?.success && Array.isArray(geminiRes.selected_indices) && geminiRes.selected_indices.length > 0) {
-          log(`Gemini selected: [${geminiRes.selected_indices.join(', ')}] (${geminiRes.explanation || ''})`);
+        let selectedIndices = [];
+        let selectedText = "";
+        let answerRes = geminiRes;
+
+        if (
+          geminiRes?.success &&
+          Array.isArray(geminiRes.selected_indices) &&
+          geminiRes.selected_indices.length > 0
+        ) {
+          log(
+            `Gemini selected: [${geminiRes.selected_indices.join(", ")}] (${geminiRes.explanation || ""})`,
+          );
           selectedIndices = geminiRes.selected_indices;
-          for (const idx of selectedIndices) {
-            const opt = qData.options[idx];
-            if (opt) {
-              selectOption(opt);
-              await sleep(150);
-            }
-          }
-          selectedText = selectedIndices.map(i => qData.options[i]?.text || `[${i}]`).join('; ');
         } else {
-          log(`⚠️ Gemini failed (${geminiRes?.error || 'no indices'}). Retrying once...`);
+          log(
+            `Gemini failed (${geminiRes?.error || "no indices"}). Retrying once...`,
+          );
           await sleep(1200);
-          const retryRes = await new Promise(resolve => {
-            chrome.runtime.sendMessage({
-              type: 'SOLVE_QUIZ_QUESTION',
-              question: qData.questionText,
-              options: qData.options.map(o => o.text),
-              isMultipleSelect: qData.isMultipleSelect
-            }, resolve);
+          const retryRes = await requestGeminiAnswer({
+            question: qData.questionText,
+            options: qData.options.map((o) => o.text),
+            isMultipleSelect: qData.isMultipleSelect,
           });
-          if (retryRes?.success && Array.isArray(retryRes.selected_indices)) {
+          answerRes = retryRes || geminiRes;
+
+          if (
+            retryRes?.success &&
+            Array.isArray(retryRes.selected_indices) &&
+            retryRes.selected_indices.length > 0
+          ) {
             selectedIndices = retryRes.selected_indices;
-            for (const idx of selectedIndices) {
-              if (qData.options[idx]) selectOption(qData.options[idx]);
-            }
           } else {
-            selectedIndices = [0];
-            if (qData.options[0]) selectOption(qData.options[0]);
+            const reason =
+              retryRes?.error || geminiRes?.error || "no answer returned";
+            log(
+              `Gemini could not answer Q${qNum}: ${reason}. Stopping before a guess is saved.`,
+            );
+            sendStatus({
+              status: "error",
+              message: `Gemini failed on Q${qNum}. Solver stopped; nothing was submitted.`,
+            });
+            solverAbortedForFailure = true;
+            isRunning = false;
+            break;
           }
-          selectedText = selectedIndices.map(i => qData.options[i]?.text || `[${i}]`).join('; ');
         }
+
+        if (qData.isMultipleSelect) {
+          await clearUnselectedCheckboxes(qData.options, selectedIndices);
+        }
+
+        // Stop may arrive while the API call is in flight.
+        if (!isRunning) break;
+
+        for (const idx of selectedIndices) {
+          const opt = qData.options[idx];
+          if (opt) {
+            selectOption(opt);
+            await sleep(150);
+          }
+        }
+        selectedText = selectedIndices
+          .map((i) => qData.options[i]?.text || `[${i}]`)
+          .join("; ");
 
         // Live Inspector Log
         appendAiCommunicationLog({
           questionNumber: qNum,
           totalQuestions: totalQuestions,
           questionText: qData.questionText,
-          options: qData.options.map(o => o.text),
+          options: qData.options.map((o) => o.text),
           isMultipleSelect: qData.isMultipleSelect,
           selectedIndices,
           selectedText,
-          explanation: geminiRes?.explanation || (geminiRes?.error ? `Fallback: ${geminiRes.error}` : ''),
-          model: geminiRes?.model || 'gemini-2.0-flash',
+          explanation: answerRes?.explanation || "",
+          model: answerRes?.model || "unknown",
           latencyMs,
           timestamp: new Date().toLocaleTimeString(),
-          status: geminiRes?.success ? 'success' : 'fallback'
+          status: answerRes?.success ? "success" : "fallback",
         });
 
         // Allow Angular Reactive Form 350ms to digest selection
@@ -2008,7 +2898,9 @@
 
           // If toast "Please enter your response to save" appears, retry selection & save
           if (hasEnterResponseToast()) {
-            log(`⚠️ "Please enter your response" toast detected for Q${qNum}. Re-clicking option & re-saving...`);
+            log(
+              `"Please enter your response" toast detected for Q${qNum}. Re-clicking option and re-saving...`,
+            );
             for (const idx of selectedIndices) {
               if (qData.options[idx]) {
                 selectOption(qData.options[idx]);
@@ -2032,10 +2924,13 @@
     } else {
       // Sequential fallback for pages without sidebar palette
       let consecutiveNoQuestion = 0;
-      let lastHandledSig = '';
+      let lastHandledSig = "";
 
       while (isRunning) {
-        while (isPaused) { await sleep(300); }
+        while (isRunning && isPaused) {
+          await sleep(300);
+        }
+        if (!isRunning) break;
 
         const domQNum = getCurrentQuestionNumber();
         const qData = scrapeCurrentQuestion();
@@ -2048,8 +2943,8 @@
         }
 
         consecutiveNoQuestion = 0;
-        const effectiveQNum = domQNum || (answeredSet.size + 1);
-        const qSig = `${effectiveQNum}|${qData.questionText}|${qData.options.map(o => o.text).join(',')}`;
+        const effectiveQNum = domQNum || answeredSet.size + 1;
+        const qSig = `${effectiveQNum}|${qData.questionText}|${qData.options.map((o) => o.text).join(",")}`;
 
         if (qSig === lastHandledSig && answeredSet.has(effectiveQNum)) {
           break;
@@ -2064,44 +2959,81 @@
         lastApiCallTime = Date.now();
 
         const seqStartTime = performance.now();
-        const geminiRes = await new Promise(resolve => {
-          chrome.runtime.sendMessage({
-            type: 'SOLVE_QUIZ_QUESTION',
-            question: qData.questionText,
-            options: qData.options.map(o => o.text),
-            isMultipleSelect: qData.isMultipleSelect
-          }, resolve);
+        const geminiRes = await requestGeminiAnswer({
+          question: qData.questionText,
+          options: qData.options.map((o) => o.text),
+          isMultipleSelect: qData.isMultipleSelect,
         });
         const seqLatencyMs = Math.round(performance.now() - seqStartTime);
 
-        let selectedIndices = [0];
-        let selectedText = '';
-        if (geminiRes?.success && Array.isArray(geminiRes.selected_indices) && geminiRes.selected_indices.length > 0) {
+        let selectedIndices = [];
+        let selectedText = "";
+        let answerRes = geminiRes;
+
+        if (
+          geminiRes?.success &&
+          Array.isArray(geminiRes.selected_indices) &&
+          geminiRes.selected_indices.length > 0
+        ) {
           selectedIndices = geminiRes.selected_indices;
-          for (const idx of selectedIndices) {
-            if (qData.options[idx]) selectOption(qData.options[idx]);
-          }
-          selectedText = selectedIndices.map(i => qData.options[i]?.text || `[${i}]`).join('; ');
         } else {
-          selectedIndices = [0];
-          if (qData.options[0]) selectOption(qData.options[0]);
-          selectedText = qData.options[0]?.text || '[0]';
+          await sleep(1200);
+          const retryRes = await requestGeminiAnswer({
+            question: qData.questionText,
+            options: qData.options.map((o) => o.text),
+            isMultipleSelect: qData.isMultipleSelect,
+          });
+          answerRes = retryRes || geminiRes;
+
+          if (
+            retryRes?.success &&
+            Array.isArray(retryRes.selected_indices) &&
+            retryRes.selected_indices.length > 0
+          ) {
+            selectedIndices = retryRes.selected_indices;
+          } else {
+            const reason =
+              retryRes?.error || geminiRes?.error || "no answer returned";
+            log(
+              `Gemini could not answer Q${effectiveQNum}: ${reason}. Stopping before a guess is saved.`,
+            );
+            sendStatus({
+              status: "error",
+              message: `Gemini failed on Q${effectiveQNum}. Solver stopped; nothing was submitted.`,
+            });
+            solverAbortedForFailure = true;
+            isRunning = false;
+            break;
+          }
         }
 
-        // FIX #13: Log to HUD inspector in sequential solver path
+        if (qData.isMultipleSelect) {
+          await clearUnselectedCheckboxes(qData.options, selectedIndices);
+        }
+
+        if (!isRunning) break;
+
+        for (const idx of selectedIndices) {
+          if (qData.options[idx]) selectOption(qData.options[idx]);
+        }
+        selectedText = selectedIndices
+          .map((i) => qData.options[i]?.text || `[${i}]`)
+          .join("; ");
+
+        // Log to the HUD inspector in the sequential solver path
         appendAiCommunicationLog({
           questionNumber: effectiveQNum,
           totalQuestions: 0,
           questionText: qData.questionText,
-          options: qData.options.map(o => o.text),
+          options: qData.options.map((o) => o.text),
           isMultipleSelect: qData.isMultipleSelect,
           selectedIndices,
           selectedText,
-          explanation: geminiRes?.explanation || (geminiRes?.error ? `Fallback: ${geminiRes.error}` : ''),
-          model: geminiRes?.model || 'unknown',
+          explanation: answerRes?.explanation || "",
+          model: answerRes?.model || "unknown",
           latencyMs: seqLatencyMs,
           timestamp: new Date().toLocaleTimeString(),
-          status: geminiRes?.success ? 'success' : 'fallback'
+          status: answerRes?.success ? "success" : "fallback",
         });
 
         await sleep(350);
@@ -2128,7 +3060,9 @@
       }
     }
 
-    log(`[${sectionName}] Section finished! Successfully answered ${questionsSolvedCount} questions.`);
+    log(
+      `[${sectionName}] Section finished! Successfully answered ${questionsSolvedCount} questions.`,
+    );
     return questionsSolvedCount;
   }
 
@@ -2136,40 +3070,79 @@
   // MESSAGE & EVENT LISTENERS
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // ── Frame registration ────────────────────────────────────────────────────
+  // The background worker uses this to route actions to the frame that owns
+  // the assessment UI (important when the test is inside an iframe).
+  let lastRegisteredAssessmentState = null;
+
+  function registerFrame(force = false) {
+    const hasAssessment = hasAssessmentDom();
+    if (!force && lastRegisteredAssessmentState === hasAssessment) return;
+    lastRegisteredAssessmentState = hasAssessment;
+    try {
+      chrome.runtime
+        .sendMessage({
+          type: "FRAME_REGISTER",
+          url: window.location.href,
+          hasAssessment,
+        })
+        .catch(() => {});
+    } catch (_) {}
+  }
+
+  setTimeout(() => registerFrame(true), 1200);
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.action) {
-      case 'START':
-      case 'START_ASSESSMENT_SOLVER':
+      case "START":
+      case "START_ASSESSMENT_SOLVER":
+        registerFrame(true);
         if (!isRunning) {
           startAssessmentSolver();
         }
         sendResponse({ ok: true });
         return false; // Synchronous response sent
-      case 'PAUSE':
-        isPaused = true;
-        sendStatus({ status: 'paused', message: 'Paused.' });
+      case "PAUSE":
+        if (isRunning && !isPaused) {
+          isPaused = true;
+          sendStatus({ status: "paused", message: "Paused." });
+        }
         sendResponse({ ok: true });
         return false;
-      case 'RESUME':
-        isPaused = false;
-        sendStatus({ status: 'running', message: 'Resumed.' });
+      case "RESUME":
+        if (isRunning && isPaused) {
+          isPaused = false;
+          sendStatus({ status: "running", message: "Resumed." });
+        }
         sendResponse({ ok: true });
         return false;
-      case 'STOP':
+      case "STOP": {
+        pendingStop = true;
+        const wasRunning = isRunning;
         isRunning = false;
-        isPaused  = false;
-        sendStatus({ status: 'stopped', message: 'Stopped.' });
-        const existingHud = document.getElementById('springbored-assignment-hud');
+        isPaused = false;
+        if (wasRunning) {
+          sendStatus({ status: "stopped", message: "Stopped." });
+        }
+        const existingHud = document.getElementById(
+          "springbored-assignment-hud",
+        );
         if (existingHud) existingHud.remove();
         sendResponse({ ok: true });
         return false;
-      case 'GET_STATUS':
-        sendResponse({ isRunning, isPaused, hasAssessment: hasAssessmentDom() });
+      }
+      case "GET_STATUS":
+        registerFrame(true);
+        sendResponse({
+          isRunning,
+          isPaused,
+          hasAssessment: hasAssessmentDom(),
+        });
         return false;
       default:
         return false; // Don't keep channel open for unrecognized messages
     }
   });
 
-  log('Assignment solver content script ready');
+  log("Assignment solver content script ready");
 })();
