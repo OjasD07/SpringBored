@@ -9,21 +9,351 @@
   let isRunning = false;
   let isPaused = false;
   let solverAbortedForFailure = false;
+  let lastAbortErrorMessage = "";
+  let lastContentWorkingModel = null;
 
   // ─── Logging & Utilities ──────────────────────────────────────────────────
   const log = (msg) =>
     console.log(
       `%c[SpringBored Assignment] ${msg}`,
-      "color:#e4601e;font-weight:bold",
+      "color:#38bdf8;font-weight:bold",
     );
 
   function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
   }
 
-  /** Ask the service worker for an answer without risking a permanent hang. */
-  function requestGeminiAnswer(payload, timeoutMs = 90000) {
-    return new Promise((resolve) => {
+  function sanitizeApiKeyInContent(input) {
+    if (!input || typeof input !== "string") return "";
+    let cleaned = input.replace(
+      /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202F\u2060\uFEFF]/g,
+      "",
+    );
+    const aizaMatch = cleaned.match(/AIza[A-Za-z0-9_-]{20,}/);
+    if (aizaMatch) return aizaMatch[0];
+    cleaned = cleaned.trim().replace(/^['"`]+|['"`]+$/g, "").replace(/\s+/g, "");
+    const wrappedMatch = cleaned.match(/AIza[A-Za-z0-9_-]{20,}/);
+    if (wrappedMatch) return wrappedMatch[0];
+    return cleaned;
+  }
+
+  function parseJsonSafeInContent(text) {
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch (_) {}
+    const fence = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fence && fence[1]) {
+      try {
+        return JSON.parse(fence[1].trim());
+      } catch (_) {}
+    }
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  function matchOptionTextInContent(candidateText, options) {
+    if (!candidateText || typeof candidateText !== "string" || !Array.isArray(options)) {
+      return null;
+    }
+    const normalize = (s) =>
+      String(s || "")
+        .replace(/^Index\s+\d+\s*(?:\(Option\s+[A-Z]\))?\s*[:\-]?\s*/i, "")
+        .replace(/^(?:Option\s+)?\(?[A-Za-z0-9]\)?[\.\)\:\-]\s*/i, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+
+    const target = normalize(candidateText);
+    if (!target) return null;
+
+    const exact = [];
+    for (let i = 0; i < options.length; i++) {
+      if (normalize(options[i]) === target) exact.push(i);
+    }
+    if (exact.length === 1) return exact[0];
+
+    if (target.length >= 4) {
+      const sub = [];
+      for (let i = 0; i < options.length; i++) {
+        const optNorm = normalize(options[i]);
+        if (optNorm && (optNorm.includes(target) || target.includes(optNorm))) {
+          sub.push(i);
+        }
+      }
+      if (sub.length === 1) return sub[0];
+    }
+    return null;
+  }
+
+  function convertChoiceToIndexInContent(val, options) {
+    if (!Array.isArray(options) || options.length === 0) return null;
+    if (typeof val === "number" && !isNaN(val)) {
+      return val >= 0 && val < options.length ? val : null;
+    }
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (/^\d+$/.test(trimmed)) {
+        const num = parseInt(trimmed, 10);
+        return num >= 0 && num < options.length ? num : null;
+      }
+      const idxMatch = trimmed.match(/^Index\s+(\d+)\b/i);
+      if (idxMatch) {
+        const num = parseInt(idxMatch[1], 10);
+        return num >= 0 && num < options.length ? num : null;
+      }
+      const letterMatch = trimmed.match(/^(?:option\s*)?\(?([A-Za-z])\)?[\.\:\s]*$/i);
+      if (letterMatch) {
+        const idx = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
+        return idx >= 0 && idx < options.length ? idx : null;
+      }
+      const textIdx = matchOptionTextInContent(trimmed, options);
+      if (textIdx !== null) return textIdx;
+    }
+    return null;
+  }
+
+  /**
+   * Direct content-script fallback solver against Google's Gemini API.
+   * Ensures questions are solved even if the background service worker was not
+   * reloaded or hit a model rate-limit.
+   */
+  async function solveQuestionDirectlyInContent(questionText, options, isMultipleSelect) {
+    try {
+      const { geminiApiKey, geminiModel, geminiApiVersion } =
+        await chrome.storage.local.get(["geminiApiKey", "geminiModel", "geminiApiVersion"]);
+      const cleanKey = sanitizeApiKeyInContent(geminiApiKey);
+      if (!cleanKey) {
+        return { success: false, error: "Gemini API key missing in storage" };
+      }
+
+      const safeOptions = (options || []).map((o) => String(o || "").trim());
+      const optionsFormatted = safeOptions
+        .map((opt, idx) => `Index ${idx} (Option ${String.fromCharCode(65 + idx)}): ${opt}`)
+        .join("\n\n");
+
+      const prompt = `You are a principal subject-matter expert and examination solver with mastery across Computer Science, Software Engineering, Data Structures & Algorithms, Databases/SQL, Cloud, Networking, Mathematics, Statistics, Science, Finance, Management, and all academic and professional disciplines.
+
+Read the ENTIRE question stem (including any code listings, tables, or numbered statements) and EVERY option below carefully before determining the answer.
+
+=== COMPLETE QUESTION (${safeOptions.length} OPTIONS) ===
+${questionText}
+=== END QUESTION ===
+
+=== ALL OPTIONS (0-BASED INDICES 0 TO ${safeOptions.length - 1}) ===
+${optionsFormatted}
+=== END OPTIONS ===
+
+QUESTION TYPE:
+${isMultipleSelect ? "MULTIPLE-SELECT (CHECKBOXES): Select ALL options that are objectively true/correct." : "SINGLE-SELECT (RADIO BUTTONS): Select EXACTLY ONE option that is objectively the best/correct answer."}
+
+MANDATORY SOLVING PROTOCOL:
+1. Analyze the full question stem first. If code, SQL, XPath, pseudocode, or math expressions are present, trace the exact syntax and execution rules line-by-line.
+2. Evaluate EVERY option from Index 0 (Option A) through Index ${safeOptions.length - 1} (Option ${String.fromCharCode(64 + safeOptions.length)}) individually in "option_analysis".
+3. Verify that your chosen 0-based index in "selected_indices" matches the exact option text you place in "selected_option_texts" (Option A = 0, Option B = 1, Option C = 2, Option D = 3).
+4. Respond ONLY with a valid JSON object matching this exact schema:
+{
+  "option_analysis": [
+    "Index 0 (Option A): [True/False] reason",
+    "Index 1 (Option B): [True/False] reason"
+  ],
+  "reasoning": "Step-by-step verification of the correct answer",
+  "selected_indices": [0],
+  "selected_option_texts": ["Exact text of the selected option"],
+  "explanation": "Clear, concise summary of why this option is correct"
+}`;
+
+      const retired = new Set([
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro",
+        "gemini-3.8-flash",
+        "gemini-3.5-flash",
+      ]);
+      const rawModel = (geminiModel || "").replace(/^models\//, "").trim();
+      const userModel =
+        rawModel && !retired.has(rawModel.toLowerCase()) ? rawModel : "gemini-2.5-flash";
+
+      const fallbackChain = [
+        lastContentWorkingModel,
+        userModel,
+        "gemini-2.5-flash",
+        "gemini-3-flash-preview",
+        "gemini-2.5-pro",
+        "gemini-3.1-pro-preview",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-flash-latest",
+        "gemini-pro-latest",
+      ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+      const apiVer = geminiApiVersion || "v1beta";
+      let lastError = "No model succeeded";
+      let discoveredDynamic = false;
+
+      for (let i = 0; i < fallbackChain.length; i++) {
+        const model = fallbackChain[i];
+        try {
+          const baseUrl = `https://generativelanguage.googleapis.com/${apiVer}/models/${model}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+          let res = await fetch(baseUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": cleanKey,
+            },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.0,
+                responseMimeType: "application/json",
+              },
+            }),
+          });
+
+          if (!res.ok && res.status === 400) {
+            res = await fetch(baseUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": cleanKey,
+              },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.0 },
+              }),
+            });
+          }
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            const rawMsg = errData?.error?.message || `HTTP ${res.status}`;
+            lastError =
+              res.status === 429
+                ? `Quota/rate limit on ${model} (HTTP 429)`
+                : rawMsg;
+
+            if (rawMsg.toLowerCase().includes("api key not valid")) {
+              return { success: false, error: "API key not valid. Re-save key in popup." };
+            }
+
+            if (!discoveredDynamic && i >= 1) {
+              discoveredDynamic = true;
+              try {
+                const mRes = await fetch(
+                  `https://generativelanguage.googleapis.com/${apiVer}/models?key=${encodeURIComponent(cleanKey)}`,
+                  { headers: { "x-goog-api-key": cleanKey } },
+                );
+                if (mRes.ok) {
+                  const mData = await mRes.json().catch(() => ({}));
+                  const dynModels = (mData?.models || [])
+                    .filter((m) =>
+                      (m.supportedGenerationMethods || []).includes("generateContent"),
+                    )
+                    .map((m) => (m.name || "").replace(/^models\//, ""))
+                    .filter(
+                      (n) =>
+                        n.toLowerCase().includes("gemini") &&
+                        !n.toLowerCase().includes("embedding") &&
+                        !n.toLowerCase().includes("imagen") &&
+                        !n.toLowerCase().includes("tts"),
+                    );
+                  for (const dm of dynModels) {
+                    if (!fallbackChain.includes(dm)) fallbackChain.push(dm);
+                  }
+                }
+              } catch (_) {}
+            }
+            continue;
+          }
+
+          const data = await res.json();
+          const parts = data?.candidates?.[0]?.content?.parts || [];
+          const textPart =
+            parts.filter((p) => !p.thought && typeof p.text === "string").pop() ||
+            parts.find((p) => typeof p.text === "string");
+          const rawText = textPart?.text;
+          if (!rawText) continue;
+
+          const parsed = parseJsonSafeInContent(rawText);
+          let rawCandidates = [];
+          if (parsed) {
+            if (Array.isArray(parsed.selected_indices)) {
+              rawCandidates = parsed.selected_indices;
+            } else if (
+              typeof parsed.selected_indices === "number" ||
+              typeof parsed.selected_indices === "string"
+            ) {
+              rawCandidates = [parsed.selected_indices];
+            } else if (parsed.selected_index !== undefined) {
+              rawCandidates = [parsed.selected_index];
+            } else if (parsed.answer !== undefined) {
+              rawCandidates = Array.isArray(parsed.answer)
+                ? parsed.answer
+                : [parsed.answer];
+            }
+          }
+
+          let validIndices = rawCandidates
+            .map((c) => convertChoiceToIndexInContent(c, safeOptions))
+            .filter((x) => x !== null && x >= 0 && x < safeOptions.length);
+
+          if (parsed && parsed.selected_option_texts) {
+            const textList = Array.isArray(parsed.selected_option_texts)
+              ? parsed.selected_option_texts
+              : [parsed.selected_option_texts];
+            const textMatched = textList
+              .map((t) => matchOptionTextInContent(String(t || ""), safeOptions))
+              .filter((x) => x !== null && x >= 0 && x < safeOptions.length);
+            if (textMatched.length > 0) {
+              validIndices = [...new Set(textMatched)];
+            }
+          }
+
+          if (validIndices.length === 0) {
+            const idxMatches = [
+              ...rawText.matchAll(/(?:option|index|choice)\s*[:=\[]?\s*(\d+)/gi),
+            ];
+            for (const m of idxMatches) {
+              const num = parseInt(m[1], 10);
+              if (num >= 0 && num < safeOptions.length && !validIndices.includes(num)) {
+                validIndices.push(num);
+              }
+            }
+          }
+
+          validIndices = [...new Set(validIndices)];
+          if (validIndices.length > 0) {
+            lastContentWorkingModel = model;
+            return {
+              success: true,
+              selected_indices: isMultipleSelect ? validIndices : [validIndices[0]],
+              explanation:
+                parsed?.explanation ||
+                parsed?.reasoning ||
+                "Answer reasoned by Gemini AI",
+              model,
+            };
+          }
+        } catch (err) {
+          lastError = err.message || "Network error";
+        }
+      }
+
+      return { success: false, error: lastError };
+    } catch (e) {
+      return { success: false, error: e.message || "Direct solver failed" };
+    }
+  }
+
+  /** Ask the service worker for an answer, with automatic direct-API fallback. */
+  async function requestGeminiAnswer(payload, timeoutMs = 45000) {
+    const bgRes = await new Promise((resolve) => {
       let settled = false;
       let timer = null;
 
@@ -31,17 +361,10 @@
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
-        resolve(
-          response ?? {
-            success: false,
-            error: "No response from the background worker",
-          },
-        );
+        resolve(response ?? null);
       };
 
-      timer = setTimeout(() => {
-        finish({ success: false, error: "Gemini request timed out" });
-      }, timeoutMs);
+      timer = setTimeout(() => finish(null), timeoutMs);
 
       try {
         chrome.runtime.sendMessage(
@@ -51,10 +374,34 @@
             finish(response);
           },
         );
-      } catch (e) {
-        finish({ success: false, error: e.message || "Message failed" });
+      } catch (_) {
+        finish(null);
       }
     });
+
+    if (
+      bgRes?.success &&
+      Array.isArray(bgRes.selected_indices) &&
+      bgRes.selected_indices.length > 0
+    ) {
+      return bgRes;
+    }
+
+    // Fallback to direct API call from content script if background worker is
+    // stale, asleep, or failed on a model rate-limit.
+    const directRes = await solveQuestionDirectlyInContent(
+      payload.question,
+      payload.options,
+      payload.isMultipleSelect,
+    );
+    if (directRes?.success) {
+      return directRes;
+    }
+
+    return directRes || bgRes || {
+      success: false,
+      error: "No response from Gemini API",
+    };
   }
 
   // ─── Multi-Frame Document Crawler ─────────────────────────────────────────
@@ -1986,7 +2333,7 @@
         const nativeCheckboxes = [
           ...root.querySelectorAll('input[type="checkbox"]'),
         ].filter((inp) => {
-          const target = inp.closest('label, .checkbox, .option, .choice, li, div') || inp;
+          const target = inp.closest('label, .checkbox, .option, .choice, li') || inp.parentElement || inp;
           return isElementRendered(target) && !isInsideIgnoredUi(target);
         });
 
@@ -1994,7 +2341,7 @@
         const nativeRadios = [
           ...root.querySelectorAll('input[type="radio"]'),
         ].filter((inp) => {
-          const target = inp.closest('label, .radio, .option, .choice, li, div') || inp;
+          const target = inp.closest('label, .radio, .option, .choice, li') || inp.parentElement || inp;
           return isElementRendered(target) && !isInsideIgnoredUi(target);
         });
 
@@ -2122,10 +2469,10 @@
         questionCard = cur;
       }
 
-      // Exclude action buttons, timers, headers, and option radio groups from question stem extraction
+      // Exclude action buttons, timers, and option radio groups from question stem extraction
       questionCard
         .querySelectorAll(
-          'mat-radio-group, [role="radiogroup"], button, [role="button"], input[type="button"], input[type="submit"], .actions, .action-buttons, .timer, .time-left, .header, .breadcrumb, [class*="fullscreen"]'
+          'mat-radio-group, [role="radiogroup"], button, [role="button"], input[type="button"], input[type="submit"], .actions, .action-buttons, .timer, .time-left, .breadcrumb'
         )
         .forEach((el) => {
           // Only exclude mat-radio-group/[role=radiogroup] if it does not wrap the question stem itself
@@ -2601,6 +2948,7 @@
       // ── STEP 3: Finish & Submit Test (SAFETY GUARDED) ──
       if (solverAbortedForFailure) {
         const msg =
+          lastAbortErrorMessage ||
           "Solver stopped because Gemini did not return an answer. No guess was saved and the test was not submitted.";
         log(msg);
         sendStatus({ status: "error", message: msg });
@@ -2839,12 +3187,27 @@
           } else {
             const reason =
               retryRes?.error || geminiRes?.error || "no answer returned";
+            lastAbortErrorMessage = `Gemini failed on Q${qNum}: ${reason}`;
             log(
               `Gemini could not answer Q${qNum}: ${reason}. Stopping before a guess is saved.`,
             );
+            appendAiCommunicationLog({
+              questionNumber: qNum,
+              totalQuestions: totalQuestions,
+              questionText: qData.questionText,
+              options: qData.options.map((o) => o.text),
+              isMultipleSelect: qData.isMultipleSelect,
+              selectedIndices: [],
+              selectedText: "None (Stopped)",
+              explanation: `Error: ${reason}`,
+              model: answerRes?.model || "Gemini",
+              latencyMs,
+              timestamp: new Date().toLocaleTimeString(),
+              status: "fallback",
+            });
             sendStatus({
               status: "error",
-              message: `Gemini failed on Q${qNum}. Solver stopped; nothing was submitted.`,
+              message: lastAbortErrorMessage,
             });
             solverAbortedForFailure = true;
             isRunning = false;
@@ -2994,12 +3357,27 @@
           } else {
             const reason =
               retryRes?.error || geminiRes?.error || "no answer returned";
+            lastAbortErrorMessage = `Gemini failed on Q${effectiveQNum}: ${reason}`;
             log(
               `Gemini could not answer Q${effectiveQNum}: ${reason}. Stopping before a guess is saved.`,
             );
+            appendAiCommunicationLog({
+              questionNumber: effectiveQNum,
+              totalQuestions: 0,
+              questionText: qData.questionText,
+              options: qData.options.map((o) => o.text),
+              isMultipleSelect: qData.isMultipleSelect,
+              selectedIndices: [],
+              selectedText: "None (Stopped)",
+              explanation: `Error: ${reason}`,
+              model: answerRes?.model || "Gemini",
+              latencyMs: seqLatencyMs,
+              timestamp: new Date().toLocaleTimeString(),
+              status: "fallback",
+            });
             sendStatus({
               status: "error",
-              message: `Gemini failed on Q${effectiveQNum}. Solver stopped; nothing was submitted.`,
+              message: lastAbortErrorMessage,
             });
             solverAbortedForFailure = true;
             isRunning = false;

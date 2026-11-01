@@ -1,6 +1,6 @@
 <p align="left">
   <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 8px 8px 0; vertical-align: middle;" /></a>
-  <a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/SpringBored/main/SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #070d17; border-radius: 10px; padding: 4px; margin: 0 0 8px 8px; vertical-align: middle;" /></a>
+  <a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="./SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #070d17; border-radius: 10px; padding: 4px; margin: 0 0 8px 8px; vertical-align: middle;" /></a>
 </p>
 
 # ⚡ SpringBored
@@ -12,7 +12,7 @@ SpringBored is split into two specialized, standalone extensions:
 | Edition | Folder | Description | AI Support |
 | :--- | :--- | :--- | :---: |
 | [**SpringBored**](./SpringBored) | `SpringBored/` | **Course Completer**: 16× video accelerator, auto-reading mark completed, confirmation dialog handler, and multi-module course tree navigator. Skips quizzes for manual review. | ❌ No | 
-| [**SpringBored Assignment**](./SpringBored%20-%20Assignment) | `SpringBored - Assignment/` | **Assessment & Quiz Solver**: Powered by **Google Gemini 3.8 Flash**. Autonomously attempts multi-section assessments (IAP) and quizzes, reads code snippets and options, auto-selects correct answers, saves, and submits tests. | ✅ Yes (Gemini 3.8 Flash) |
+| [**SpringBored Assignment**](./SpringBored%20-%20Assignment) | `SpringBored - Assignment/` | **Assessment & Quiz Solver**: Powered by **Google Gemini 3.8 Flash**. Autonomously attempts multi-section assessments (IAP) and quizzes, reads code snippets and options, auto-selects correct answers, saves, and submits tests. | ✅ Yes (Gemini - Free Tier Also Works) |
 
 ---
 

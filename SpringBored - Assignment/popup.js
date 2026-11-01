@@ -96,10 +96,6 @@ const LEGACY_MODELS = new Set([
   'gemini-1.5-flash',
   'gemini-1.5-flash-8b',
   'gemini-1.5-pro',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-001',
-  'gemini-2.0-flash-lite',
-  'gemini-2.5-flash-lite',
   'gemini-3.8-flash',
   'gemini-3.5-flash'
 ]);
@@ -112,6 +108,8 @@ function formatModelName(modelCode) {
   if (clean === 'gemini-3-flash-preview') return 'Gemini 3 Flash';
   if (clean === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
   if (clean === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
+  if (clean === 'gemini-2.5-flash-lite') return 'Gemini 2.5 Flash Lite';
+  if (clean === 'gemini-2.0-flash') return 'Gemini 2.0 Flash';
   if (clean === 'gemini-pro-latest') return 'Gemini Pro Latest';
   if (clean === 'gemini-flash-latest') return 'Gemini Flash Latest';
   return clean
@@ -145,7 +143,7 @@ chrome.storage.local.get(['aiQuizEnabled', 'geminiApiKey', 'geminiModel'], (data
 
   let modelName = (data.geminiModel || '').replace(/^models\//, '').trim();
   if (!modelName || LEGACY_MODELS.has(modelName.toLowerCase())) {
-    modelName = 'gemini-2.5-pro';
+    modelName = 'gemini-2.5-flash';
     chrome.storage.local.set({ geminiModel: modelName });
   }
 
@@ -250,12 +248,12 @@ function isValidApiKeyFormat(key) {
  */
 async function validateKeyDirectlyInPopup(cleanKey, targetModel) {
   const preferred = [
-    'gemini-3.1-pro-preview',
-    'gemini-3-pro-preview',
+    'gemini-2.5-flash',
     'gemini-3-flash-preview',
     'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-pro-latest',
+    'gemini-3.1-pro-preview',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash',
     'gemini-flash-latest'
   ];
 
@@ -276,9 +274,9 @@ async function validateKeyDirectlyInPopup(cleanKey, targetModel) {
           .map(m => (m.name || '').replace(/^models\//, ''))
           .filter(name => name.toLowerCase().includes('gemini'));
 
-        let chosen = targetModel || 'gemini-2.5-pro';
+        let chosen = targetModel || 'gemini-2.5-flash';
         if (available.length > 0 && (!available.includes(chosen) || LEGACY_MODELS.has(chosen.toLowerCase()))) {
-          chosen = preferred.find(p => available.includes(p)) || available.find(m => m.includes('pro')) || available.find(m => m.includes('flash')) || available[0];
+          chosen = preferred.find(p => available.includes(p)) || available.find(m => m.includes('flash')) || available[0];
         }
         return { success: true, model: chosen, apiVersion: ver };
       } else {
