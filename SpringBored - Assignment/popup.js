@@ -486,17 +486,33 @@ function addLog(text, type = 'running') {
   }
 }
 
-// ── Send action to content scripts (all frames) ───────────────────────────────
+// ── Send action to content scripts (all frames, auto-injecting if needed) ─────
 async function triggerSolverAction(action) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
 
-  // 1. Broadcast to every frame in the tab. This reaches an assessment inside
-  //    an iframe even if the service worker was restarted and lost its frame map.
-  chrome.tabs.sendMessage(tab.id, { action }).catch(() => {});
+  let delivered = false;
+  try {
+    const res = await chrome.tabs.sendMessage(tab.id, { action });
+    if (res && res.ok) delivered = true;
+  } catch (_) {
+    delivered = false;
+  }
 
-  // 2. Ask the service worker to dispatch to the known assessment frames too.
-  //    Content scripts ignore duplicate starts and repeated pause/resume actions.
+  // If the tab was already open before the extension was loaded/reloaded,
+  // content.js will not be running yet. Inject it on the fly and retry.
+  if (!delivered && chrome.scripting?.executeScript) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: true },
+        files: ['content.js']
+      });
+      await new Promise((r) => setTimeout(r, 250));
+      await chrome.tabs.sendMessage(tab.id, { action }).catch(() => {});
+    } catch (_) {}
+  }
+
+  // Also ask the service worker to dispatch to any registered child frames.
   chrome.runtime.sendMessage({ type: 'DISPATCH_ACTION', action }).catch(() => {});
 }
 

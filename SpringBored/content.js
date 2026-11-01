@@ -4,6 +4,9 @@
 (function () {
   'use strict';
 
+  if (window.__SPRINGBORED_COURSE_LOADED__) return;
+  window.__SPRINGBORED_COURSE_LOADED__ = true;
+
   // ─── GUARD: Only run on actual course viewer pages ────────────────────────
   // The viewer URL always contains /viewer/ — we must not touch the home page
   const ON_VIEWER_PAGE = /\/viewer\//.test(window.location.pathname);

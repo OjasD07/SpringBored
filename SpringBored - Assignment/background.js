@@ -16,7 +16,7 @@ const tabStatuses = new Map();
 // two matching iframes cannot drive the same assessment at the same time.
 // Map<tabId, { frameId, acquiredAt }>
 const solverLocks = new Map();
-const SOLVER_LOCK_TTL_MS = 60 * 60 * 1000;
+const SOLVER_LOCK_TTL_MS = 15 * 1000;
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   for (const [key, info] of activeFrames.entries()) {
@@ -45,6 +45,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         ...message,
         receivedAt: Date.now()
       });
+
+      if (message.status === 'running' || message.status === 'paused') {
+        solverLocks.set(sender.tab.id, {
+          frameId: sender.frameId ?? 0,
+          acquiredAt: Date.now()
+        });
+      } else if (message.status === 'done' || message.status === 'error' || message.status === 'stopped') {
+        solverLocks.delete(sender.tab.id);
+      }
     }
 
     // Broadcast status to popup views
@@ -83,11 +92,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false;
     }
 
-    const existing = solverLocks.get(tabId);
-    const isStale = existing && Date.now() - existing.acquiredAt > SOLVER_LOCK_TTL_MS;
-    if (existing && existing.frameId !== frameId && !isStale) {
-      sendResponse({ granted: false, ownerFrameId: existing.frameId });
-      return false;
+    if (!message.force) {
+      const existing = solverLocks.get(tabId);
+      const isStale = existing && Date.now() - existing.acquiredAt > SOLVER_LOCK_TTL_MS;
+      if (existing && existing.frameId !== frameId && !isStale) {
+        sendResponse({ granted: false, ownerFrameId: existing.frameId });
+        return false;
+      }
     }
 
     solverLocks.set(tabId, { frameId, acquiredAt: Date.now() });
@@ -99,7 +110,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab?.id;
     const frameId = sender.frameId ?? 0;
     const existing = tabId !== undefined ? solverLocks.get(tabId) : null;
-    if (existing && existing.frameId === frameId) {
+    if (!existing || existing.frameId === frameId || message.force) {
       solverLocks.delete(tabId);
     }
     sendResponse({ released: true });
@@ -115,23 +126,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      // Route to the frame that owns the run, plus every frame that reported
-      // assessment UI. Frame 0 is always included: the top frame's content
-      // script ignores START unless the assessment DOM is actually there.
+      if (action === 'START' || action === 'START_ASSESSMENT_SOLVER' || action === 'STOP') {
+        solverLocks.delete(tabId);
+      }
+
       const targets = new Set([0]);
       const lock = solverLocks.get(tabId);
       if (lock) targets.add(lock.frameId);
 
       for (const info of activeFrames.values()) {
         if (info.tabId !== tabId) continue;
-        if (action === 'START' || action === 'START_ASSESSMENT_SOLVER') {
-          // Assessment frames first; registrations can be slightly stale, so
-          // include other frames too and let each content script's DOM guard
-          // decide. The lock above still prevents duplicate execution.
-          targets.add(info.frameId);
-        } else {
-          targets.add(info.frameId);
-        }
+        targets.add(info.frameId);
       }
 
       for (const frameId of targets) {

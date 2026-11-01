@@ -163,10 +163,21 @@ function addLog(text, type = 'running') {
 // ── Send action to active tab's content script ────────────────────────────────
 async function sendToContentScript(action) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return;
+  if (!tab?.id) return;
   try {
     await chrome.tabs.sendMessage(tab.id, { action });
   } catch (e) {
+    if (chrome.scripting?.executeScript) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
+        await new Promise((r) => setTimeout(r, 250));
+        await chrome.tabs.sendMessage(tab.id, { action });
+        return;
+      } catch (_) {}
+    }
     applyStatus('error', 'Cannot reach page. Make sure you are on a Springboard course.');
     addLog('Error: content script not reachable', 'error');
   }

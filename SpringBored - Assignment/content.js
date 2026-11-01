@@ -5,6 +5,9 @@
 (function () {
   "use strict";
 
+  if (window.__SPRINGBORED_ASSIGNMENT_LOADED__) return;
+  window.__SPRINGBORED_ASSIGNMENT_LOADED__ = true;
+
   // ─── State ────────────────────────────────────────────────────────────────
   let isRunning = false;
   let isPaused = false;
@@ -430,20 +433,33 @@ MANDATORY SOLVING PROTOCOL:
   }
 
   // ─── Assessment Context Detection ─────────────────────────────────────────
+  function isSameOriginChildFrame() {
+    if (window === window.top) return false;
+    try {
+      return Boolean(window.top && window.top.__SPRINGBORED_ASSIGNMENT_LOADED__);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function hasAssessmentDom() {
     const docs = getActiveDocuments();
     for (const d of docs) {
+      if (!d?.body) continue;
       if (findAttemptSectionButtons([d]).length > 0) return true;
       if (findStartButtons([d]).length > 0) return true;
       if (findSaveButton([d])) return true;
+      if (findFinishButton([d])) return true;
+      if (getAvailablePaletteCircles([d]).length >= 2) return true;
       if (
-        d.querySelector(
-          'input[type="radio"], [role="radio"], mat-radio-button, .circle, .q-num',
-        )
-      )
+        d.querySelectorAll(
+          'input[type="radio"], [role="radio"], mat-radio-button, .mat-mdc-radio-button, mat-checkbox, .mat-mdc-checkbox',
+        ).length >= 2
+      ) {
         return true;
+      }
 
-      const txt = (d.body?.textContent || "").toLowerCase();
+      const txt = (d.body.textContent || "").toLowerCase();
       if (
         txt.includes("objective questions") ||
         txt.includes("attempt section") ||
@@ -1403,7 +1419,7 @@ MANDATORY SOLVING PROTOCOL:
           e.stopPropagation();
           if (!isRunning) {
             log("HUD action button pressed. Starting solver...");
-            startAssessmentSolver();
+            startAssessmentSolver(true);
           } else {
             isPaused = !isPaused;
             sendStatus({
@@ -2700,7 +2716,7 @@ MANDATORY SOLVING PROTOCOL:
    * The service worker owns the lock so separate frames cannot start two
    * solvers at once. The in-window flag is only a fallback for worker restarts.
    */
-  async function acquireSolverLock() {
+  async function acquireSolverLock(force = false) {
     try {
       const res = await new Promise((resolve) => {
         let settled = false;
@@ -2711,25 +2727,33 @@ MANDATORY SOLVING PROTOCOL:
           if (timer) clearTimeout(timer);
           resolve(value);
         };
-        timer = setTimeout(() => finish(null), 3000);
-        chrome.runtime.sendMessage({ type: "ACQUIRE_SOLVER_LOCK" }, (value) => {
-          void chrome.runtime.lastError;
-          finish(value ?? null);
-        });
+        timer = setTimeout(() => finish(null), 2000);
+        chrome.runtime.sendMessage(
+          { type: "ACQUIRE_SOLVER_LOCK", force: !!force },
+          (value) => {
+            void chrome.runtime.lastError;
+            finish(value ?? null);
+          },
+        );
       });
       if (res && res.granted === true) {
         solverLockHeld = true;
         return true;
       }
-      if (res && res.granted === false) {
+      if (res && res.granted === false && !force) {
         return false;
       }
     } catch (_) {}
 
     try {
       const topWin = window.top || window;
-      if (topWin.__SPB_SOLVER_ACTIVE__) return false;
+      const now = Date.now();
+      const activeAt = topWin.__SPB_SOLVER_ACTIVE_AT__ || 0;
+      if (!force && topWin.__SPB_SOLVER_ACTIVE__ && now - activeAt < 15000) {
+        return false;
+      }
       topWin.__SPB_SOLVER_ACTIVE__ = true;
+      topWin.__SPB_SOLVER_ACTIVE_AT__ = now;
       solverLockHeld = true;
       return true;
     } catch (_) {
@@ -2743,35 +2767,45 @@ MANDATORY SOLVING PROTOCOL:
     solverLockHeld = false;
     try {
       chrome.runtime
-        .sendMessage({ type: "RELEASE_SOLVER_LOCK" })
+        .sendMessage({ type: "RELEASE_SOLVER_LOCK", force: true })
         .catch(() => {});
     } catch (_) {}
     try {
-      (window.top || window).__SPB_SOLVER_ACTIVE__ = false;
+      const topWin = window.top || window;
+      topWin.__SPB_SOLVER_ACTIVE__ = false;
+      topWin.__SPB_SOLVER_ACTIVE_AT__ = 0;
     } catch (_) {}
   }
 
-  async function startAssessmentSolver() {
-    // isStarting closes the race between two START messages arriving before the
-    // async DOM check and lock request finish. Both would otherwise run.
+  async function startAssessmentSolver(force = false) {
+    // If this is a same-origin child iframe, delegate to window.top so the
+    // top window coordinates the run and renders a single HUD.
+    if (!force && isSameOriginChildFrame()) {
+      try {
+        if (typeof window.top.__SPRINGBORED_START_SOLVER__ === "function") {
+          window.top.__SPRINGBORED_START_SOLVER__(true);
+          return;
+        }
+      } catch (_) {}
+      return;
+    }
+
     if (isRunning || isStarting) return;
     isStarting = true;
     pendingStop = false;
 
-    // Only the frame that actually contains assessment UI may start. This stops
-    // the top frame from claiming the run when the test lives in an iframe.
     let foundAssessment = hasAssessmentDom();
     for (let i = 0; i < 10 && !foundAssessment; i++) {
       await sleep(250);
       foundAssessment = hasAssessmentDom();
     }
-    if (!foundAssessment) {
+    if (!foundAssessment && !force) {
       log("No assessment interface in this frame; start ignored.");
       isStarting = false;
       return;
     }
 
-    if (!(await acquireSolverLock())) {
+    if (!(await acquireSolverLock(force || window === window.top))) {
       log(
         "Another frame is already executing the solver. Ignoring duplicate request.",
       );
@@ -3468,7 +3502,50 @@ MANDATORY SOLVING PROTOCOL:
     } catch (_) {}
   }
 
-  setTimeout(() => registerFrame(true), 1200);
+  window.__SPRINGBORED_START_SOLVER__ = startAssessmentSolver;
+
+  function maybeMountHud() {
+    if (isSameOriginChildFrame()) return;
+    if (hasAssessmentDom()) {
+      registerFrame(true);
+      if (!document.getElementById("springbored-assignment-hud")) {
+        createOrUpdateHud("Ready to solve", "", false);
+      }
+    }
+  }
+
+  // Bind global keyboard shortcuts immediately (even before HUD is mounted)
+  if (!hudShortcutsBound && !isSameOriginChildFrame()) {
+    hudShortcutsBound = true;
+    window.addEventListener("keydown", (e) => {
+      if (
+        (e.altKey && e.key.toLowerCase() === "s") ||
+        (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "s") ||
+        e.key === "F2"
+      ) {
+        e.preventDefault();
+        const hudBtn = document.getElementById("sbHudActionBtn");
+        if (hudBtn) {
+          hudBtn.click();
+        } else if (!isRunning) {
+          startAssessmentSolver(true);
+        } else {
+          isPaused = !isPaused;
+          sendStatus({
+            status: isPaused ? "paused" : "running",
+            message: isPaused ? "Paused." : "Solving assessment...",
+          });
+        }
+      }
+    });
+  }
+
+  setTimeout(() => {
+    registerFrame(true);
+    maybeMountHud();
+  }, 800);
+  setTimeout(maybeMountHud, 2200);
+  setTimeout(maybeMountHud, 4500);
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg.action) {
@@ -3476,7 +3553,7 @@ MANDATORY SOLVING PROTOCOL:
       case "START_ASSESSMENT_SOLVER":
         registerFrame(true);
         if (!isRunning) {
-          startAssessmentSolver();
+          startAssessmentSolver(window === window.top);
         }
         sendResponse({ ok: true });
         return false; // Synchronous response sent
