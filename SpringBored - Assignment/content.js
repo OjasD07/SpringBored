@@ -142,7 +142,13 @@
    * Ensures questions are solved even if the background service worker was not
    * reloaded or hit a model rate-limit.
    */
-  async function solveQuestionDirectlyInContent(questionText, options, isMultipleSelect) {
+  async function solveQuestionDirectlyInContent(
+    questionText,
+    options,
+    isMultipleSelect,
+    assessmentContext = "",
+    images = [],
+  ) {
     try {
       const { geminiApiKey, geminiModel, geminiApiVersion } =
         await chrome.storage.local.get(["geminiApiKey", "geminiModel", "geminiApiVersion"]);
@@ -156,10 +162,14 @@
         .map((opt, idx) => `Index ${idx} (Option ${String.fromCharCode(65 + idx)}): ${opt}`)
         .join("\n\n");
 
-      const prompt = `You are a principal subject-matter expert and examination solver with mastery across Computer Science, Software Engineering, Data Structures & Algorithms, Databases/SQL, Cloud, Networking, Mathematics, Statistics, Science, Finance, Management, and all academic and professional disciplines.
+      const contextSection = assessmentContext
+        ? `\n=== ASSESSMENT / SUBJECT DOMAIN ===\n${String(assessmentContext).slice(0, 600)}\n(Interpret all terminology, programming language bindings, library APIs, and conventions strictly within this subject domain.)\n=== END SUBJECT DOMAIN ===\n`
+        : "";
 
-Read the ENTIRE question stem (including any code listings, tables, or numbered statements) and EVERY option below carefully before determining the answer.
+      const prompt = `You are a principal subject-matter expert and examination solver with mastery across Computer Science, Software Engineering, Data Structures & Algorithms, Databases/SQL, Selenium/Automation, Cloud, Networking, Mathematics, Statistics, Science, Finance, Management, and all academic and professional disciplines.
 
+Read the ENTIRE question stem (including any code listings, tables, formulas, or numbered statements) and EVERY option below carefully before determining the answer.
+${contextSection}
 === COMPLETE QUESTION (${safeOptions.length} OPTIONS) ===
 ${questionText}
 === END QUESTION ===
@@ -172,11 +182,13 @@ QUESTION TYPE:
 ${isMultipleSelect ? "MULTIPLE-SELECT (CHECKBOXES): Select ALL options that are objectively true/correct." : "SINGLE-SELECT (RADIO BUTTONS): Select EXACTLY ONE option that is objectively the best/correct answer."}
 
 MANDATORY SOLVING PROTOCOL:
-1. Analyze the full question stem first. If code, SQL, XPath, pseudocode, or math expressions are present, trace the exact syntax and execution rules line-by-line.
-2. Evaluate EVERY option from Index 0 (Option A) through Index ${safeOptions.length - 1} (Option ${String.fromCharCode(64 + safeOptions.length)}) individually in "option_analysis".
-3. Verify that your chosen 0-based index in "selected_indices" matches the exact option text you place in "selected_option_texts" (Option A = 0, Option B = 1, Option C = 2, Option D = 3).
-4. Respond ONLY with a valid JSON object matching this exact schema:
+1. Check the exact polarity of the question first (whether it asks for what IS true/correct or what is NOT/EXCEPT/FALSE/INVALID).
+2. Analyze the full question stem. If code, SQL, XPath, pseudocode, or math expressions are present, trace the exact syntax and execution rules line-by-line.
+3. Evaluate EVERY option from Index 0 (Option A) through Index ${safeOptions.length - 1} (Option ${String.fromCharCode(64 + safeOptions.length)}) individually in "option_analysis".
+4. Verify that your chosen 0-based index in "selected_indices" matches the exact option text you place in "selected_option_texts" (Option A = 0, Option B = 1, Option C = 2, Option D = 3).
+5. Respond ONLY with a valid JSON object matching this exact schema:
 {
+  "question_polarity": "POSITIVE or NEGATIVE",
   "option_analysis": [
     "Index 0 (Option A): [True/False] reason",
     "Index 1 (Option B): [True/False] reason"
@@ -184,8 +196,23 @@ MANDATORY SOLVING PROTOCOL:
   "reasoning": "Step-by-step verification of the correct answer",
   "selected_indices": [0],
   "selected_option_texts": ["Exact text of the selected option"],
+  "confidence": "high",
   "explanation": "Clear, concise summary of why this option is correct"
 }`;
+
+      const contentParts = [{ text: prompt }];
+      if (Array.isArray(images)) {
+        for (const img of images.slice(0, 2)) {
+          if (img && img.mimeType && img.data) {
+            contentParts.push({
+              inlineData: {
+                mimeType: img.mimeType,
+                data: img.data,
+              },
+            });
+          }
+        }
+      }
 
       const retired = new Set([
         "gemini-1.5-flash",
@@ -216,6 +243,21 @@ MANDATORY SOLVING PROTOCOL:
       let lastError = "No model succeeded";
       let discoveredDynamic = false;
 
+      function makeGenConfig(modelName, useJson = true, useThinking = true) {
+        const lower = String(modelName || "").toLowerCase();
+        const cfg = { temperature: 0.0 };
+        if (useJson) cfg.responseMimeType = "application/json";
+        if (
+          useThinking &&
+          (lower === "gemini-2.5-flash" || lower === "gemini-2.5-pro")
+        ) {
+          cfg.thinkingConfig = {
+            thinkingBudget: lower.includes("pro") ? 4096 : 2048,
+          };
+        }
+        return cfg;
+      }
+
       for (let i = 0; i < fallbackChain.length; i++) {
         const model = fallbackChain[i];
         try {
@@ -227,13 +269,24 @@ MANDATORY SOLVING PROTOCOL:
               "x-goog-api-key": cleanKey,
             },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                temperature: 0.0,
-                responseMimeType: "application/json",
-              },
+              contents: [{ parts: contentParts }],
+              generationConfig: makeGenConfig(model, true, true),
             }),
           });
+
+          if (!res.ok && res.status === 400) {
+            res = await fetch(baseUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": cleanKey,
+              },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: makeGenConfig(model, true, false),
+              }),
+            });
+          }
 
           if (!res.ok && res.status === 400) {
             res = await fetch(baseUrl, {
@@ -318,21 +371,29 @@ MANDATORY SOLVING PROTOCOL:
             }
           }
 
-          let validIndices = rawCandidates
+          const indexCandidates = rawCandidates
             .map((c) => convertChoiceToIndexInContent(c, safeOptions))
             .filter((x) => x !== null && x >= 0 && x < safeOptions.length);
 
+          let textMatched = [];
           if (parsed && parsed.selected_option_texts) {
             const textList = Array.isArray(parsed.selected_option_texts)
               ? parsed.selected_option_texts
               : [parsed.selected_option_texts];
-            const textMatched = textList
+            textMatched = textList
               .map((t) => matchOptionTextInContent(String(t || ""), safeOptions))
               .filter((x) => x !== null && x >= 0 && x < safeOptions.length);
-            if (textMatched.length > 0) {
-              validIndices = [...new Set(textMatched)];
-            }
           }
+
+          const indexDisagreed =
+            textMatched.length > 0 &&
+            indexCandidates.length > 0 &&
+            textMatched[0] !== indexCandidates[0];
+
+          let validIndices =
+            textMatched.length > 0
+              ? [...new Set(textMatched)]
+              : [...new Set(indexCandidates)];
 
           if (validIndices.length === 0) {
             const idxMatches = [
@@ -348,14 +409,107 @@ MANDATORY SOLVING PROTOCOL:
 
           validIndices = [...new Set(validIndices)];
           if (validIndices.length > 0) {
+            let finalIndices = isMultipleSelect ? validIndices : [validIndices[0]];
+            let finalExplanation =
+              parsed?.explanation ||
+              parsed?.reasoning ||
+              "Answer reasoned by Gemini AI";
+            const confidence = String(parsed?.confidence || "high").toLowerCase();
+            const hasNegationOrCode =
+              /\b(not|except|false|incorrect|invalid|never|cannot)\b/i.test(questionText) ||
+              questionText.includes("```");
+
+            if (
+              isMultipleSelect ||
+              confidence === "low" ||
+              confidence === "medium" ||
+              indexDisagreed ||
+              hasNegationOrCode
+            ) {
+              try {
+                const proposedSummary = finalIndices
+                  .map(
+                    (idx) =>
+                      `Index ${idx} (Option ${String.fromCharCode(65 + idx)}): ${safeOptions[idx]}`,
+                  )
+                  .join("; ");
+                const criticPrompt = `You are a strict technical exam reviewer verifying a proposed solution before final submission.
+${contextSection}
+=== QUESTION ===
+${questionText}
+=== OPTIONS ===
+${optionsFormatted}
+
+QUESTION TYPE: ${isMultipleSelect ? "MULTIPLE-SELECT (select all correct options)" : "SINGLE-SELECT (select exactly one option)"}
+PROPOSED ANSWER: ${proposedSummary}
+PROPOSED REASONING: ${parsed?.reasoning || finalExplanation}
+
+VERIFICATION CHECKLIST:
+1. Did the proposed answer misread a negative word (NOT, EXCEPT, FALSE, INVALID)?
+2. If there is code, SQL, XPath, or math, trace it again carefully: does another option actually match the exact output/syntax?
+3. Are the 0-based index numbers in "selected_indices" 100% aligned with the exact text in "selected_option_texts"?
+
+Respond ONLY with valid JSON:
+{
+  "verification_notes": "Audit of proposed answer vs alternatives",
+  "selected_indices": ${JSON.stringify(finalIndices)},
+  "selected_option_texts": ${JSON.stringify(finalIndices.map((idx) => safeOptions[idx]))},
+  "explanation": "Final verified explanation"
+}`;
+                const criticRes = await fetch(baseUrl, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": cleanKey,
+                  },
+                  body: JSON.stringify({
+                    contents: [{ parts: [{ text: criticPrompt }] }],
+                    generationConfig: makeGenConfig(model, true, true),
+                  }),
+                });
+                if (criticRes.ok) {
+                  const criticData = await criticRes.json().catch(() => ({}));
+                  const cParts = criticData?.candidates?.[0]?.content?.parts || [];
+                  const cTextPart =
+                    cParts.filter((p) => !p.thought && typeof p.text === "string").pop() ||
+                    cParts.find((p) => typeof p.text === "string");
+                  const cParsed = parseJsonSafeInContent(cTextPart?.text || "");
+                  if (cParsed) {
+                    const cTextList = Array.isArray(cParsed.selected_option_texts)
+                      ? cParsed.selected_option_texts
+                      : cParsed.selected_option_texts
+                        ? [cParsed.selected_option_texts]
+                        : [];
+                    const cMatched = cTextList
+                      .map((t) => matchOptionTextInContent(String(t || ""), safeOptions))
+                      .filter((x) => x !== null && x >= 0 && x < safeOptions.length);
+                    const cIdxRaw = Array.isArray(cParsed.selected_indices)
+                      ? cParsed.selected_indices
+                      : cParsed.selected_indices !== undefined
+                        ? [cParsed.selected_indices]
+                        : [];
+                    const cIdx = cIdxRaw
+                      .map((c) => convertChoiceToIndexInContent(c, safeOptions))
+                      .filter((x) => x !== null && x >= 0 && x < safeOptions.length);
+                    const verifiedList =
+                      cMatched.length > 0 ? [...new Set(cMatched)] : [...new Set(cIdx)];
+                    if (verifiedList.length > 0) {
+                      finalIndices = isMultipleSelect ? verifiedList : [verifiedList[0]];
+                      finalExplanation =
+                        cParsed.explanation ||
+                        cParsed.verification_notes ||
+                        finalExplanation;
+                    }
+                  }
+                }
+              } catch (_) {}
+            }
+
             lastContentWorkingModel = model;
             return {
               success: true,
-              selected_indices: isMultipleSelect ? validIndices : [validIndices[0]],
-              explanation:
-                parsed?.explanation ||
-                parsed?.reasoning ||
-                "Answer reasoned by Gemini AI",
+              selected_indices: finalIndices,
+              explanation: finalExplanation,
               model,
             };
           }
@@ -413,6 +567,8 @@ MANDATORY SOLVING PROTOCOL:
       payload.question,
       payload.options,
       payload.isMultipleSelect,
+      payload.assessmentContext,
+      payload.images,
     );
     if (directRes?.success) {
       if (directRes.model) recordActiveAnsweringModel(directRes.model);
@@ -2195,9 +2351,28 @@ MANDATORY SOLVING PROTOCOL:
       const tag = el.tagName.toUpperCase();
       if (SKIP_TAGS.has(tag)) return '';
       if (isInsideIgnoredUi(el)) return '';
-      if (!isElementRendered(el)) return '';
+
+      // Skip MathJax/KaTeX duplicate visual/screen-reader clones when we already extract the primary math node
+      if (
+        el.classList?.contains('mjx-assistive-mml') ||
+        (el.classList?.contains('katex-html') && el.parentElement?.querySelector?.('annotation'))
+      ) {
+        return '';
+      }
 
       if (tag === 'BR') return '\n';
+
+      // Extract LaTeX from KaTeX / MathJax annotation if available
+      if (el.classList?.contains('katex') || tag === 'MJX-CONTAINER' || el.classList?.contains('MathJax')) {
+        const texAnnotation = el.querySelector?.('annotation[encoding*="tex"], annotation');
+        if (texAnnotation && texAnnotation.textContent?.trim()) {
+          return ` $${texAnnotation.textContent.trim()}$ `;
+        }
+        const ariaMath = (el.getAttribute?.('aria-label') || '').trim();
+        if (ariaMath) return ` ${ariaMath} `;
+      }
+
+      if (!isElementRendered(el)) return '';
 
       if (tag === 'IMG') {
         const alt = (el.getAttribute('alt') || el.getAttribute('title') || '').trim();
@@ -2246,6 +2421,16 @@ MANDATORY SOLVING PROTOCOL:
         const trimmedCode = inner.trim();
         if (!trimmedCode) return '';
         return trimmedCode.includes('\n') ? `\n\`\`\`\n${trimmedCode}\n\`\`\`\n` : ` \`${trimmedCode}\` `;
+      }
+
+      if (tag === 'SUP') {
+        const t = inner.trim();
+        return t ? `^(${t})` : '';
+      }
+
+      if (tag === 'SUB') {
+        const t = inner.trim();
+        return t ? `_(${t})` : '';
       }
 
       if (tag === 'LI') {
@@ -2315,9 +2500,96 @@ MANDATORY SOLVING PROTOCOL:
   }
 
   /**
-   * Group candidate option elements by their shared container so we pick the
-   * complete option set belonging to the active question on screen.
+   * Extract the assessment / subject title from the sidebar or header (e.g.
+   * "Assessment - Selenium Basics with C Sharp") so Gemini solves questions
+   * in the exact language/domain of the test.
    */
+  function extractAssessmentContext(root) {
+    if (!root?.body) return '';
+    try {
+      const candidates = [
+        ...root.querySelectorAll(
+          '.assessment-title, .test-title, .quiz-title, .course-title, .sidebar h1, .sidebar h2, .sidebar h3, .sidebar h4, .sidebar p, .sidebar div, header h1, header h2, h1, h2, h3'
+        ),
+      ];
+      for (const el of candidates) {
+        if (isInsideIgnoredUi(el) && !el.closest('.sidebar, .left-sidebar, header')) continue;
+        const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (
+          txt.length >= 6 &&
+          txt.length <= 120 &&
+          (/assessment\s*[\-:]/i.test(txt) ||
+            /quiz\s*[\-:]/i.test(txt) ||
+            /test\s*[\-:]/i.test(txt)) &&
+          !/^question\s*\d+/i.test(txt)
+        ) {
+          return txt;
+        }
+      }
+      // Fallback: check left sidebar top text above palette circles
+      const allEls = [...root.querySelectorAll('div, span, p, h1, h2, h3, h4')];
+      for (const el of allEls) {
+        if (el.children.length > 2) continue;
+        const rect = el.getBoundingClientRect?.() || { left: 999, top: 999, width: 0, height: 0 };
+        if (rect.width > 40 && rect.left < 320 && rect.top > 40 && rect.top < 260) {
+          const txt = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (txt.length >= 8 && txt.length <= 120 && !/^\d+$/.test(txt) && !/objective questions/i.test(txt)) {
+            return txt;
+          }
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  /**
+   * Convert any diagram/code-screenshot <img> inside the question stem into
+   * inline base64 data so Gemini's multimodal vision can inspect it.
+   */
+  function extractQuestionImages(questionCard, optionContainers) {
+    const results = [];
+    if (!questionCard) return results;
+    try {
+      const imgs = [...questionCard.querySelectorAll('img')].filter((img) => {
+        if (!isElementRendered(img)) return false;
+        const rect = img.getBoundingClientRect();
+        if (rect.width < 36 || rect.height < 24) return false;
+        for (const opt of optionContainers) {
+          if (opt.wrapper?.contains(img) || opt.container?.contains(img)) return false;
+        }
+        return true;
+      });
+
+      for (const img of imgs.slice(0, 2)) {
+        const src = img.getAttribute('src') || '';
+        if (src.startsWith('data:image/')) {
+          const m = src.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+          if (m && m[2].length < 2000000) {
+            results.push({ mimeType: m[1], data: m[2] });
+          }
+          continue;
+        }
+        if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+          try {
+            const canvas = document.createElement('canvas');
+            const scale = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+            canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/png');
+              const base64 = dataUrl.split(',')[1];
+              if (base64 && base64.length < 2000000) {
+                results.push({ mimeType: 'image/png', data: base64 });
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return results;
+  }
   function selectBestOptionGroup(elements, root) {
     if (!elements || elements.length < 2) return [];
 
@@ -2600,10 +2872,15 @@ MANDATORY SOLVING PROTOCOL:
           );
       }
 
+      const assessmentContext = extractAssessmentContext(root);
+      const images = extractQuestionImages(questionCard, optionContainers);
+
       return {
         questionText: questionText || 'Multiple choice question',
         options: optionContainers,
         isMultipleSelect,
+        assessmentContext,
+        images,
         rootDocument: root,
       };
     }
@@ -2683,6 +2960,35 @@ MANDATORY SOLVING PROTOCOL:
   function isAnyOptionChecked(options) {
     if (!Array.isArray(options) || options.length === 0) return false;
     return options.some((opt) => isOptionActuallyChecked(opt));
+  }
+
+  /**
+   * Select every target option index and verify that the DOM radio/checkbox
+   * state actually became checked before clicking Save.
+   */
+  async function ensureOptionsSelected(options, selectedIndices) {
+    for (const idx of selectedIndices) {
+      const opt = options[idx];
+      if (!opt) continue;
+      selectOption(opt);
+      await sleep(160);
+
+      if (!isOptionActuallyChecked(opt)) {
+        // Retry with wrapper / inner label / inputElement if first click did not register
+        const retryTargets = [
+          opt.element,
+          opt.container,
+          opt.wrapper?.querySelector?.('label, .mat-radio-label, .mat-checkbox-layout, input'),
+          opt.inputElement,
+        ].filter(Boolean);
+
+        for (const rt of retryTargets) {
+          clickElementThoroughly(rt);
+          await sleep(120);
+          if (isOptionActuallyChecked(opt)) break;
+        }
+      }
+    }
   }
 
   /**
@@ -3227,6 +3533,8 @@ MANDATORY SOLVING PROTOCOL:
           question: qData.questionText,
           options: qData.options.map((o) => o.text),
           isMultipleSelect: qData.isMultipleSelect,
+          assessmentContext: qData.assessmentContext || sectionName,
+          images: qData.images || [],
         });
         const latencyMs = Math.round(performance.now() - startTime);
 
@@ -3252,6 +3560,8 @@ MANDATORY SOLVING PROTOCOL:
             question: qData.questionText,
             options: qData.options.map((o) => o.text),
             isMultipleSelect: qData.isMultipleSelect,
+            assessmentContext: qData.assessmentContext || sectionName,
+            images: qData.images || [],
           });
           answerRes = retryRes || geminiRes;
 
@@ -3299,13 +3609,7 @@ MANDATORY SOLVING PROTOCOL:
         // Stop may arrive while the API call is in flight.
         if (!isRunning) break;
 
-        for (const idx of selectedIndices) {
-          const opt = qData.options[idx];
-          if (opt) {
-            selectOption(opt);
-            await sleep(150);
-          }
-        }
+        await ensureOptionsSelected(qData.options, selectedIndices);
         selectedText = selectedIndices
           .map((i) => qData.options[i]?.text || `[${i}]`)
           .join("; ");
@@ -3403,6 +3707,8 @@ MANDATORY SOLVING PROTOCOL:
           question: qData.questionText,
           options: qData.options.map((o) => o.text),
           isMultipleSelect: qData.isMultipleSelect,
+          assessmentContext: qData.assessmentContext || sectionName,
+          images: qData.images || [],
         });
         const seqLatencyMs = Math.round(performance.now() - seqStartTime);
 
@@ -3422,6 +3728,8 @@ MANDATORY SOLVING PROTOCOL:
             question: qData.questionText,
             options: qData.options.map((o) => o.text),
             isMultipleSelect: qData.isMultipleSelect,
+            assessmentContext: qData.assessmentContext || sectionName,
+            images: qData.images || [],
           });
           answerRes = retryRes || geminiRes;
 
@@ -3468,9 +3776,7 @@ MANDATORY SOLVING PROTOCOL:
 
         if (!isRunning) break;
 
-        for (const idx of selectedIndices) {
-          if (qData.options[idx]) selectOption(qData.options[idx]);
-        }
+        await ensureOptionsSelected(qData.options, selectedIndices);
         selectedText = selectedIndices
           .map((i) => qData.options[i]?.text || `[${i}]`)
           .join("; ");
