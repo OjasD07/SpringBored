@@ -584,6 +584,17 @@ chrome.runtime.onMessage.addListener((msg) => {
       isPaused = false;
     }
 
+    if (msg.model) {
+      const formattedModel = formatModelName(msg.model);
+      ensureModelOption(msg.model);
+      if (modelSelect) modelSelect.value = msg.model;
+      if (quizBadgeModelText) quizBadgeModelText.textContent = formattedModel;
+      if (keyStatusText && geminiApiKeyInput?.value) {
+        keyStatusText.textContent = `✓ Active (${formattedModel})`;
+        keyStatusText.className = 'key-status success';
+      }
+    }
+
     const logType =
       msg.status === 'paused'  ? 'skip'  :
       msg.status === 'stopped' ? 'error' :

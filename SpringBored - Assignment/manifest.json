@@ -45,5 +45,21 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "Assets/Logo.png",
+        "icons/icon16.png",
+        "icons/icon48.png",
+        "icons/icon128.png"
+      ],
+      "matches": [
+        "https://*.onwingspan.com/*",
+        "https://*.springboard.infosys.com/*",
+        "https://*.infosys.com/*",
+        "https://*.infosysapps.com/*"
+      ]
+    }
+  ]
 }

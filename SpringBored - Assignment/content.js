@@ -14,6 +14,22 @@
   let solverAbortedForFailure = false;
   let lastAbortErrorMessage = "";
   let lastContentWorkingModel = null;
+  let activeAnsweringModel = null;
+
+  function recordActiveAnsweringModel(modelName) {
+    if (!modelName) return;
+    const clean = String(modelName).replace(/^models\//, "").trim();
+    if (!clean) return;
+    activeAnsweringModel = clean;
+    lastContentWorkingModel = clean;
+    const modelEl = document.getElementById("sbHudModel");
+    if (modelEl) {
+      modelEl.textContent = formatModelName(clean);
+    }
+    try {
+      chrome.storage.local.set({ geminiModel: clean });
+    } catch (_) {}
+  }
 
   // ─── Logging & Utilities ──────────────────────────────────────────────────
   const log = (msg) =>
@@ -387,6 +403,7 @@ MANDATORY SOLVING PROTOCOL:
       Array.isArray(bgRes.selected_indices) &&
       bgRes.selected_indices.length > 0
     ) {
+      if (bgRes.model) recordActiveAnsweringModel(bgRes.model);
       return bgRes;
     }
 
@@ -398,6 +415,7 @@ MANDATORY SOLVING PROTOCOL:
       payload.isMultipleSelect,
     );
     if (directRes?.success) {
+      if (directRes.model) recordActiveAnsweringModel(directRes.model);
       return directRes;
     }
 
@@ -488,6 +506,9 @@ MANDATORY SOLVING PROTOCOL:
     }
 
     const payload = { ...data };
+    if (activeAnsweringModel && !payload.model) {
+      payload.model = activeAnsweringModel;
+    }
     if (payload.total === undefined && lastProgress.total > 0) {
       payload.completed = Number.isFinite(payload.completed)
         ? payload.completed
@@ -533,6 +554,9 @@ MANDATORY SOLVING PROTOCOL:
     if (clean === "gemini-3-flash-preview") return "Gemini 3 Flash";
     if (clean === "gemini-2.5-pro") return "Gemini 2.5 Pro";
     if (clean === "gemini-2.5-flash") return "Gemini 2.5 Flash";
+    if (clean === "gemini-2.5-flash-lite") return "Gemini 2.5 Flash Lite";
+    if (clean === "gemini-2.0-flash") return "Gemini 2.0 Flash";
+    if (clean === "gemini-2.0-flash-lite") return "Gemini 2.0 Flash Lite";
     if (clean === "gemini-pro-latest") return "Gemini Pro Latest";
     if (clean === "gemini-flash-latest") return "Gemini Flash Latest";
     return clean
@@ -660,13 +684,22 @@ MANDATORY SOLVING PROTOCOL:
   ) {
     let hud = document.getElementById("springbored-assignment-hud");
     if (!hud) {
+      const fallbackLogoUrl =
+        "https://raw.githubusercontent.com/OjasD07/SpringBored/main/SpringBored/Assets/Logo.png";
+      let hudLogoUrl = fallbackLogoUrl;
+      try {
+        if (chrome?.runtime?.getURL) {
+          hudLogoUrl = chrome.runtime.getURL("Assets/Logo.png");
+        }
+      } catch (_) {}
+
       hud = document.createElement("div");
       hud.id = "springbored-assignment-hud";
       hud.innerHTML = `
         <div class="sb-hud-bar" id="sbHudBar">
           <div class="sb-hud-header" id="sbHudHeader" title="Drag to move anywhere">
             <div class="sb-hud-brand">
-              <span class="sb-hud-mark">SB</span>
+              <img class="sb-hud-logo" id="sbHudLogo" src="${hudLogoUrl}" alt="SpringBored" />
               <span class="sb-hud-title">SpringBored</span>
               <span class="sb-hud-model" id="sbHudModel">Gemini</span>
             </div>
@@ -779,20 +812,16 @@ MANDATORY SOLVING PROTOCOL:
           align-items: center;
           gap: 7px;
         }
-        .sb-hud-mark {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 20px;
-          height: 20px;
+        .sb-hud-logo {
+          width: 22px;
+          height: 22px;
           flex-shrink: 0;
           border-radius: 5px;
-          background: linear-gradient(135deg, #38bdf8 0%, #f97316 100%);
-          color: #06101e;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          font-size: 8.5px;
-          font-weight: 800;
-          letter-spacing: 0.3px;
+          object-fit: cover;
+          border: 1px solid rgba(56, 189, 248, 0.45);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+          display: block;
+          background: #070d17;
         }
         .sb-hud-title {
           color: #f1f5f9;
@@ -1237,6 +1266,15 @@ MANDATORY SOLVING PROTOCOL:
       const hudYear = document.getElementById("sbHudCopyrightYear");
       if (hudYear) hudYear.textContent = String(new Date().getFullYear());
 
+      const hudLogo = document.getElementById("sbHudLogo");
+      if (hudLogo) {
+        hudLogo.addEventListener("error", () => {
+          if (hudLogo.src !== fallbackLogoUrl) {
+            hudLogo.src = fallbackLogoUrl;
+          }
+        });
+      }
+
       // ── Make HUD Draggable ──
       const header = document.getElementById("sbHudHeader");
       let isDragging = false;
@@ -1465,11 +1503,16 @@ MANDATORY SOLVING PROTOCOL:
     const actionBtn = document.getElementById("sbHudActionBtn");
     const modelEl = document.getElementById("sbHudModel");
 
-    chrome.storage.local.get(["geminiModel"], (d) => {
-      if (modelEl && d.geminiModel) {
-        modelEl.textContent = formatModelName(d.geminiModel);
-      }
-    });
+    if (modelEl && activeAnsweringModel) {
+      modelEl.textContent = formatModelName(activeAnsweringModel);
+    } else {
+      chrome.storage.local.get(["geminiModel"], (d) => {
+        if (modelEl) {
+          const chosen = activeAnsweringModel || d.geminiModel || "gemini-2.5-flash";
+          modelEl.textContent = formatModelName(chosen);
+        }
+      });
+    }
 
     if (statusEl && statusText) statusEl.textContent = statusText;
     if (progEl) progEl.textContent = progressText;
@@ -3501,6 +3544,23 @@ MANDATORY SOLVING PROTOCOL:
         .catch(() => {});
     } catch (_) {}
   }
+
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes.geminiModel?.newValue) {
+        const nextModel = String(changes.geminiModel.newValue)
+          .replace(/^models\//, "")
+          .trim();
+        if (nextModel) {
+          activeAnsweringModel = nextModel;
+          const modelEl = document.getElementById("sbHudModel");
+          if (modelEl) {
+            modelEl.textContent = formatModelName(nextModel);
+          }
+        }
+      }
+    });
+  } catch (_) {}
 
   window.__SPRINGBORED_START_SOLVER__ = startAssessmentSolver;
 

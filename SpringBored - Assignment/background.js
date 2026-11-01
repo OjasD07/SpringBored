@@ -842,6 +842,9 @@ CRITICAL RULES:
 
       if (validIndices.length > 0) {
         lastWorkingModel = model;
+        if (model !== geminiModel) {
+          chrome.storage.local.set({ geminiModel: model }).catch(() => {});
+        }
         return {
           success: true,
           selected_indices: isMultipleSelect ? validIndices : [validIndices[0]],
