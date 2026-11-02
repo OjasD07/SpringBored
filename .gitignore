@@ -12,9 +12,11 @@ Desktop.ini
 *.pem
 *.key
 
-# Packaged extension archives & build artifacts
+# Packaged extension archives & local release staging
 *.zip
 *.crx
+Release Files/
+release files/
 dist/
 build/
 node_modules/

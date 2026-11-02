@@ -32,7 +32,7 @@
 
 ## 🚀 Installation
 
-1. Download **`SpringBored-Course-v1.0.0.zip`** (or `SpringBored-Complete-Suite-v1.0.0.zip`) from [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases/latest) and extract it to a permanent folder, **or** clone the repository:
+1. Download **`SpringBored-Course-v1.0.0.zip`** from [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases/latest) and extract it to a permanent folder, **or** clone the repository:
    ```bash
    git clone https://github.com/OjasD07/SpringBored.git
    ```

@@ -57,9 +57,8 @@ To keep course completion separate from graded evaluations, SpringBored is split
 All official builds are distributed via [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases/latest). Because Chrome cannot load a `.zip` file directly in Developer Mode, extract the archive first:
 
 1. Download the latest release archive from [**GitHub Releases (`v1.0.0`)**](https://github.com/OjasD07/SpringBored/releases/latest):
-   - `SpringBored-Course-v1.0.0.zip` *(Course Edition only)*
-   - `SpringBored-Assessment-v1.0.0.zip` *(Assessment Edition only)*
-   - `SpringBored-Complete-Suite-v1.0.0.zip` *(Both extensions)*
+   - `SpringBored-Course-v1.0.0.zip` *(Course Edition — 16× Video & Reading Completer)*
+   - `SpringBored-Assessment-v1.0.0.zip` *(Assessment Edition — Gemini AI Quiz & Assessment Solver)*
    - Or clone the repository:
      ```bash
      git clone https://github.com/OjasD07/SpringBored.git

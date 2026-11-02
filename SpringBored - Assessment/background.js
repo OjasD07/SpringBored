@@ -20,15 +20,17 @@ async function getOrCreateClientId() {
   return id;
 }
 
+function extractSemver(v) {
+  const s = String(v || '').trim();
+  const m = s.match(/(\d+\.\d+(?:\.\d+)?)/);
+  return m ? m[1] : s.replace(/^v/i, '');
+}
+
 function compareSemver(a, b) {
-  const pa = String(a || '')
-    .replace(/^v/i, '')
-    .trim()
+  const pa = extractSemver(a)
     .split('.')
     .map((n) => parseInt(n, 10) || 0);
-  const pb = String(b || '')
-    .replace(/^v/i, '')
-    .trim()
+  const pb = extractSemver(b)
     .split('.')
     .map((n) => parseInt(n, 10) || 0);
   for (let i = 0; i < 3; i++) {
@@ -92,8 +94,8 @@ async function checkForExtensionUpdate(force = false) {
       const res = await fetch(VERSION_ENDPOINT, { cache: 'no-store' });
       if (!res.ok) throw new Error('Version API HTTP ' + res.status);
       const data = await res.json();
-      latestVersion = String(data.assessmentVersion || data.latestVersion || currentVersion).replace(/^v/i, '');
-      releaseUrl = data.releaseUrl || GITHUB_RELEASES_URL;
+      latestVersion = extractSemver(data.assessmentVersion || data.latestVersion || currentVersion);
+      releaseUrl = data.assessmentReleaseUrl || data.releaseUrl || GITHUB_RELEASES_URL;
       notes = data.changelog || '';
     } catch (_) {
       const ghRes = await fetch(GITHUB_RELEASE_API, {
@@ -102,7 +104,7 @@ async function checkForExtensionUpdate(force = false) {
       });
       if (ghRes.ok) {
         const ghData = await ghRes.json();
-        latestVersion = String(ghData.tag_name || currentVersion).replace(/^v/i, '');
+        latestVersion = extractSemver(ghData.tag_name || currentVersion);
         releaseUrl = ghData.html_url || GITHUB_RELEASES_URL;
         notes = String(ghData.name || ghData.body || '').slice(0, 140);
       }

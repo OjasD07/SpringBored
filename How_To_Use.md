@@ -40,9 +40,8 @@ SpringBored is packaged as two independent extensions so you can install either 
 
 1. Visit the official [**GitHub Releases page (`v1.0.0`)**](https://github.com/OjasD07/SpringBored/releases/latest).
 2. Download the `.zip` archive that matches your needs:
-   - `SpringBored-Course-v1.0.0.zip` — Course Edition only
-   - `SpringBored-Assessment-v1.0.0.zip` — Assessment Edition only
-   - `SpringBored-Complete-Suite-v1.0.0.zip` — Both extensions in one archive
+   - `SpringBored-Course-v1.0.0.zip` — Course Edition (16× Video & Reading Completer)
+   - `SpringBored-Assessment-v1.0.0.zip` — Assessment Edition (Gemini AI Quiz & Assessment Solver)
    *(Alternatively, clone the repository with `git clone https://github.com/OjasD07/SpringBored.git`.)*
 3. **Extract the `.zip` file** to a permanent folder on your computer (for example, `Documents/Extensions/SpringBored`).
    > ⚠️ **Important**: Chrome loads unpacked extensions directly from this folder. Do **not** delete or move the extracted folder while the extension is installed.
