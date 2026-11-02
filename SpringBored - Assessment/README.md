@@ -7,6 +7,11 @@
 
 > **Autonomous Quiz, Test & Multi-Section Assessment Solver for Infosys Springboard — powered by Google Gemini AI with dynamic model selection.**
 
+<p align="left">
+  <a href="https://github.com/OjasD07/SpringBored"><img src="https://img.shields.io/badge/%E2%98%85_Star_the_Repo-GitHub-e5a952?style=for-the-badge&logo=github&logoColor=162b21&labelColor=244534" alt="Star the Repo" /></a>
+  <a href="https://sponsor.ojasdeshpande.in/"><img src="https://img.shields.io/badge/%E2%99%A5_Support_My_OSS-Sponsor-e6926d?style=for-the-badge&logo=razorpay&logoColor=162b21&labelColor=244534" alt="Support My OSS" /></a>
+</p>
+
 SpringBored Assessment Edition is a focused, high-precision Chrome Extension (Manifest V3) dedicated exclusively to attempting and solving quizzes, tests, and multi-section assessments (IAP) on Infosys Springboard (`infyspringboard.onwingspan.com`).
 
 **Supports all subjects** — Computer Science, Management, Finance, General Knowledge, Science, and any other academic or professional domain.
@@ -75,8 +80,21 @@ SpringBored Assessment Edition is a focused, high-precision Chrome Extension (Ma
 
 ## 🔒 Security
 
-- API keys never appear in URLs — transmitted exclusively via HTTP headers.
-- Extension permissions restricted to Infosys Springboard domains only.
+- API keys never appear in URLs — transmitted exclusively via HTTP headers (`x-goog-api-key`).
 - Content Security Policy prevents unauthorized script/resource loading.
 - Prompt injection defense via input sanitization and boundary delimiters.
-- No data collection, no telemetry, no external servers.
+- Anonymous impact counters only — zero personal data, credentials, or question text collected.
+
+---
+
+## ⭐ Star & Support My Open-Source Work
+
+- ⭐ **Star the Repo**: [github.com/OjasD07/SpringBored](https://github.com/OjasD07/SpringBored)
+- 💖 **Support My OSS (Razorpay)**: [sponsor.ojasdeshpande.in](https://sponsor.ojasdeshpande.in/)
+- 🌐 **Official Website**: [springbored.ojasdeshpande.in](https://springbored.ojasdeshpande.in/)
+
+---
+
+## Author
+
+Ojas Shailesh Deshpande ([www.ojasdeshpande.in](https://www.ojasdeshpande.in/) · [contact@ojasdeshpande.in](mailto:contact@ojasdeshpande.in))

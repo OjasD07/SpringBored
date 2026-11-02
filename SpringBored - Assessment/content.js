@@ -1001,6 +1001,22 @@ Respond ONLY with valid JSON:
               </div>
             </div>
           </div>
+          <div class="sb-hud-oss-row">
+            <a
+              class="sb-hud-oss-btn star"
+              href="https://github.com/OjasD07/SpringBored"
+              target="_blank"
+              rel="noopener noreferrer"
+              >&#9733; Star the Repo</a
+            >
+            <a
+              class="sb-hud-oss-btn sponsor"
+              href="https://sponsor.ojasdeshpande.in/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >&#9829; Support my OSS</a
+            >
+          </div>
           <div class="sb-hud-footer">
             <a
               class="sb-hud-footer-brand"
@@ -1514,6 +1530,44 @@ Respond ONLY with valid JSON:
         .sb-hud-footer-brand {
           font-weight: 700;
           color: #f3ebd3 !important;
+        }
+        .sb-hud-oss-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 6px;
+          margin-top: 2px;
+        }
+        .sb-hud-oss-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          padding: 4px 6px;
+          border-radius: 5px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 8.5px;
+          font-weight: 700;
+          text-decoration: none !important;
+          transition: transform 0.12s ease, background 0.15s ease;
+        }
+        .sb-hud-oss-btn:hover {
+          transform: translateY(-1px);
+        }
+        .sb-hud-oss-btn.star {
+          background: rgba(229, 169, 82, 0.14);
+          border: 1px solid rgba(229, 169, 82, 0.42);
+          color: #e5a952 !important;
+        }
+        .sb-hud-oss-btn.star:hover {
+          background: rgba(229, 169, 82, 0.24);
+        }
+        .sb-hud-oss-btn.sponsor {
+          background: rgba(230, 146, 109, 0.16);
+          border: 1px solid rgba(230, 146, 109, 0.45);
+          color: #e6926d !important;
+        }
+        .sb-hud-oss-btn.sponsor:hover {
+          background: rgba(230, 146, 109, 0.26);
         }
         .sb-hud-update-banner {
           display: flex;

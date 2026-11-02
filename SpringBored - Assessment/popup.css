@@ -1071,6 +1071,53 @@ body {
   font-weight: 700;
 }
 
+.oss-support-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.oss-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-decoration: none;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.oss-pill:hover {
+  transform: translateY(-1px);
+}
+
+.oss-pill-star {
+  background: rgba(229, 169, 82, 0.14);
+  border: 1px solid rgba(229, 169, 82, 0.45);
+  color: var(--sky);
+}
+
+.oss-pill-star:hover {
+  background: rgba(229, 169, 82, 0.24);
+  border-color: var(--sky);
+}
+
+.oss-pill-sponsor {
+  background: rgba(230, 146, 109, 0.16);
+  border: 1px solid rgba(230, 146, 109, 0.48);
+  color: var(--orange-bright);
+}
+
+.oss-pill-sponsor:hover {
+  background: rgba(230, 146, 109, 0.26);
+  border-color: var(--orange-bright);
+}
+
 /* ── Gemini Engine Configuration Card (Assessment Edition) ────────────────── */
 
 .engine-panel {

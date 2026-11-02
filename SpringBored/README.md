@@ -6,6 +6,11 @@
 
 > **Intelligent, autonomous course automation for Infosys Springboard — fully client-side and hands-free.**
 
+<p align="left">
+  <a href="https://github.com/OjasD07/SpringBored"><img src="https://img.shields.io/badge/%E2%98%85_Star_the_Repo-GitHub-e5a952?style=for-the-badge&logo=github&logoColor=162b21&labelColor=244534" alt="Star the Repo" /></a>
+  <a href="https://sponsor.ojasdeshpande.in/"><img src="https://img.shields.io/badge/%E2%99%A5_Support_My_OSS-Sponsor-e6926d?style=for-the-badge&logo=razorpay&logoColor=162b21&labelColor=244534" alt="Support My OSS" /></a>
+</p>
+
 SpringBored is a lightweight Chrome Extension (Manifest V3) designed to autonomously progress through Infosys Springboard (`infyspringboard.onwingspan.com`) courses. It accelerates video lessons, marks reading and web-module materials as completed (including confirmation popups), manages module expansions, and skips all evaluations and quizzes to preserve academic integrity.
 
 ---
@@ -121,6 +126,14 @@ SpringBored is created for educational convenience and workflow experimentation.
 
 ---
 
+## ⭐ Star & Support My Open-Source Work
+
+- ⭐ **Star the Repo**: [github.com/OjasD07/SpringBored](https://github.com/OjasD07/SpringBored)
+- 💖 **Support My OSS (Razorpay)**: [sponsor.ojasdeshpande.in](https://sponsor.ojasdeshpande.in/)
+- 🌐 **Official Website**: [springbored.ojasdeshpande.in](https://springbored.ojasdeshpande.in/)
+
+---
+
 ## Author
 
-Ojas Deshpande [contact@ojasdeshpande.in]
+Ojas Shailesh Deshpande ([www.ojasdeshpande.in](https://www.ojasdeshpande.in/) · [contact@ojasdeshpande.in](mailto:contact@ojasdeshpande.in))

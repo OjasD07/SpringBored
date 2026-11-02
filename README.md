@@ -7,6 +7,13 @@
 
 > **Intelligent, autonomous course & assessment automation for Infosys Springboard (`infyspringboard.onwingspan.com`).**
 
+<p align="left">
+  <a href="https://github.com/OjasD07/SpringBored"><img src="https://img.shields.io/badge/%E2%98%85_Star_the_Repo-GitHub-e5a952?style=for-the-badge&logo=github&logoColor=162b21&labelColor=244534" alt="Star the Repo on GitHub" /></a>
+  <a href="https://sponsor.ojasdeshpande.in/"><img src="https://img.shields.io/badge/%E2%99%A5_Support_My_OSS-Sponsor-e6926d?style=for-the-badge&logo=razorpay&logoColor=162b21&labelColor=244534" alt="Support My OSS" /></a>
+  <a href="https://github.com/OjasD07/SpringBored/releases/latest"><img src="https://img.shields.io/badge/Release-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Release v1.0.0" /></a>
+  <a href="https://springbored.ojasdeshpande.in/"><img src="https://img.shields.io/badge/Website-springbored.ojasdeshpande.in-f3ebd3?style=for-the-badge&labelColor=244534" alt="Official Website" /></a>
+</p>
+
 SpringBored is split into two specialized, standalone extensions:
 
 | Edition | Folder | Description | AI Support |
@@ -69,6 +76,16 @@ SpringBored is designed for educational exploration and workflow productivity. U
 
 ---
 
+## ⭐ Star & Support My Open-Source Work
+
+If **SpringBored** saved you hours on Infosys Springboard courses or assessments, consider supporting its continued open-source development:
+
+- ⭐ **Star the Repository**: [github.com/OjasD07/SpringBored](https://github.com/OjasD07/SpringBored)
+- 💖 **Support My OSS (Razorpay)**: [sponsor.ojasdeshpande.in](https://sponsor.ojasdeshpande.in/)
+- 🌐 **Live Telemetry & Website**: [springbored.ojasdeshpande.in](https://springbored.ojasdeshpande.in/)
+
+---
+
 ## Author
 
-Ojas Deshpande [contact@ojasdeshpande.in]
+Ojas Shailesh Deshpande ([www.ojasdeshpande.in](https://www.ojasdeshpande.in/) · [contact@ojasdeshpande.in](mailto:contact@ojasdeshpande.in))
