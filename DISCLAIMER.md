@@ -77,7 +77,7 @@ In accordance with **Sections 7 and 8 of the [Apache License, Version 2.0](./LIC
 
 ## Author
 
-**Ojas Shailesh Deshpande** ([www.ojasdeshpande.in](https://www.ojasdeshpande.in/) · [GitHub @OjasD07](https://github.com/OjasD07) · [contact@ojasdeshpande.in](mailto:contact@ojasdeshpande.in))
+**Ojas Deshpande** ([www.ojasdeshpande.in](https://www.ojasdeshpande.in/) · [GitHub @OjasD07](https://github.com/OjasD07) · [contact@ojasdeshpande.in](mailto:contact@ojasdeshpande.in))
 
 ---
 

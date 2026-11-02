@@ -88,7 +88,7 @@ To power the live public impact counters and 52-week usage heatmap on [**springb
 ## 5. Contact
 
 For any privacy questions or data inquiries, contact:
-- **Ojas Shailesh Deshpande** — [contact@ojasdeshpande.in](mailto:contact@ojasdeshpande.in)
+- **Ojas Deshpande** — [contact@ojasdeshpande.in](mailto:contact@ojasdeshpande.in)
 
 ---
 
@@ -102,7 +102,7 @@ For any privacy questions or data inquiries, contact:
 
 ## Author
 
-**Ojas Shailesh Deshpande** ([www.ojasdeshpande.in](https://www.ojasdeshpande.in/) · [GitHub @OjasD07](https://github.com/OjasD07) · [contact@ojasdeshpande.in](mailto:contact@ojasdeshpande.in))
+**Ojas Deshpande** ([www.ojasdeshpande.in](https://www.ojasdeshpande.in/) · [GitHub @OjasD07](https://github.com/OjasD07) · [contact@ojasdeshpande.in](mailto:contact@ojasdeshpande.in))
 
 ---
 
