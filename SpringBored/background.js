@@ -4,8 +4,8 @@
 const EDITION = 'course';
 const TELEMETRY_ENDPOINT = 'https://springbored.ojasdeshpande.in/api/telemetry';
 const VERSION_ENDPOINT = 'https://springbored.ojasdeshpande.in/api/version';
-const GITHUB_RELEASE_API = 'https://api.github.com/repos/OjasD07/SpringBored/releases/latest';
-const GITHUB_RELEASES_URL = 'https://github.com/OjasD07/SpringBored/releases/latest';
+const GITHUB_RELEASE_API = 'https://api.github.com/repos/OjasD07/SpringBored/releases';
+const GITHUB_RELEASES_URL = 'https://github.com/OjasD07/SpringBored/releases#release-course-v1.0.0';
 const UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 async function getOrCreateClientId() {
@@ -105,9 +105,18 @@ async function checkForExtensionUpdate(force = false) {
       });
       if (ghRes.ok) {
         const ghData = await ghRes.json();
-        latestVersion = extractSemver(ghData.tag_name || currentVersion);
-        releaseUrl = ghData.html_url || GITHUB_RELEASES_URL;
-        notes = String(ghData.name || ghData.body || '').slice(0, 140);
+        const rel = Array.isArray(ghData)
+          ? ghData.find((r) => !r.draft && /course/i.test(`${r.tag_name || ''} ${r.name || ''}`)) ||
+            ghData.find((r) => !r.draft) ||
+            ghData[0]
+          : ghData;
+        if (rel) {
+          latestVersion = extractSemver(rel.tag_name || currentVersion);
+          releaseUrl = rel.tag_name
+            ? `https://github.com/OjasD07/SpringBored/releases#release-${rel.tag_name}`
+            : rel.html_url || GITHUB_RELEASES_URL;
+          notes = String(rel.name || rel.body || '').slice(0, 140);
+        }
       }
     }
 

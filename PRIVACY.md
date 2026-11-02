@@ -81,7 +81,7 @@ To power the live public impact counters and 52-week usage heatmap on [**springb
 - **Website Analytics**: The official website (`springbored.ojasdeshpande.in`) uses Google Analytics (`G-5WLGPCFWZL`) and Cloudflare Workers KV (`SPRINGBORED_KV`) to display aggregate community usage and GitHub Release download counts.
 
 ### 4.2 Version Update Check (`GET /api/version` & GitHub Releases API)
-- Every 6 hours (or when you click **Check updates** in the popup footer), `background.js` queries `https://springbored.ojasdeshpande.in/api/version` (with a fallback to `https://api.github.com/repos/OjasD07/SpringBored/releases/latest`) to compare your installed `manifest.json` version against the latest GitHub Release tag.
+- Every 6 hours (or when you click **Check updates** in the popup footer), `background.js` queries `https://springbored.ojasdeshpande.in/api/version` (with a fallback to `https://api.github.com/repos/OjasD07/SpringBored/releases`) to compare your installed `manifest.json` version against the latest GitHub Release tag.
 
 ---
 

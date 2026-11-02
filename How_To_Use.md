@@ -9,7 +9,7 @@
 <p align="left">
   <a href="https://github.com/OjasD07/SpringBored"><img src="https://img.shields.io/badge/%E2%98%85_Star_the_Repo-GitHub-e5a952?style=for-the-badge&logo=github&logoColor=162b21&labelColor=244534" alt="Star the Repo" /></a>
   <a href="https://sponsor.ojasdeshpande.in/"><img src="https://img.shields.io/badge/%E2%99%A5_Support_My_OSS-Sponsor-e6926d?style=for-the-badge&logo=razorpay&logoColor=162b21&labelColor=244534" alt="Support My OSS" /></a>
-  <a href="https://github.com/OjasD07/SpringBored/releases/latest"><img src="https://img.shields.io/badge/Download-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Download v1.0.0" /></a>
+  <a href="https://github.com/OjasD07/SpringBored/releases"><img src="https://img.shields.io/badge/Download-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Download v1.0.0" /></a>
 </p>
 
 ---
@@ -38,10 +38,10 @@ SpringBored is packaged as two independent extensions so you can install either 
 
 ## 2. Step 1 — Download & Extract
 
-1. Visit the official [**GitHub Releases page (`v1.0.0`)**](https://github.com/OjasD07/SpringBored/releases/latest).
+1. Visit the official [**GitHub Releases page (`v1.0.0`)**](https://github.com/OjasD07/SpringBored/releases).
 2. Download the `.zip` archive that matches your needs:
-   - `SpringBored-Course-v1.0.0.zip` — Course Edition (16× Video & Reading Completer)
-   - `SpringBored-Assessment-v1.0.0.zip` — Assessment Edition (Gemini AI Quiz & Assessment Solver)
+   - [**`SpringBored-Course-v1.0.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-course-v1.0.0) — Course Edition (16× Video & Reading Completer)
+   - [**`SpringBored-Assessment-v1.0.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0) — Assessment Edition (Gemini AI Quiz & Assessment Solver)
    *(Alternatively, clone the repository with `git clone https://github.com/OjasD07/SpringBored.git`.)*
 3. **Extract the `.zip` file** to a permanent folder on your computer (for example, `Documents/Extensions/SpringBored`).
    > ⚠️ **Important**: Chrome loads unpacked extensions directly from this folder. Do **not** delete or move the extracted folder while the extension is installed.
@@ -135,7 +135,7 @@ Both extensions include an automatic GitHub Releases update checker:
 1. Whenever a new version is published on [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases), a gold **`NEW`** badge appears on the extension toolbar icon, and an update banner appears at the top of the popup and floating HUD.
 2. You can also check manually at any time by clicking **Check updates** in the popup footer.
 3. **To install an update**:
-   - Click the update banner (or visit [`github.com/OjasD07/SpringBored/releases/latest`](https://github.com/OjasD07/SpringBored/releases/latest)) and download the new release `.zip`.
+   - Click the update banner (or visit [`github.com/OjasD07/SpringBored/releases`](https://github.com/OjasD07/SpringBored/releases)) and download the new release `.zip`.
    - Extract and overwrite the files in your existing extension folder (or run `git pull` if you cloned via Git).
    - Open `chrome://extensions/` and click the **Reload (`↻`)** icon on the SpringBored extension card. Your saved API key and personal impact stats are preserved!
 

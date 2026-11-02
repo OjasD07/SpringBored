@@ -957,7 +957,7 @@ Respond ONLY with valid JSON:
               <a
                 class="sb-hud-update-link"
                 id="sbHudUpdateLink"
-                href="https://github.com/OjasD07/SpringBored/releases/latest"
+                href="https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0"
                 target="_blank"
                 rel="noopener noreferrer"
                 >Update &nearr;</a
@@ -1646,7 +1646,7 @@ Respond ONLY with valid JSON:
           if (hudUpdateBadge) hudUpdateBadge.textContent = `v${info.latestVersion}`;
           if (hudUpdateText) hudUpdateText.textContent = `Update v${info.latestVersion} available`;
           if (hudUpdateLink) {
-            hudUpdateLink.href = info.releaseUrl || "https://github.com/OjasD07/SpringBored/releases/latest";
+            hudUpdateLink.href = info.releaseUrl || "https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0";
           }
         } else {
           hudUpdateBanner.style.display = "none";

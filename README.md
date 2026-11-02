@@ -9,7 +9,7 @@
 <p align="left">
   <a href="https://github.com/OjasD07/SpringBored"><img src="https://img.shields.io/badge/%E2%98%85_Star_the_Repo-GitHub-e5a952?style=for-the-badge&logo=github&logoColor=162b21&labelColor=244534" alt="Star the Repo on GitHub" /></a>
   <a href="https://sponsor.ojasdeshpande.in/"><img src="https://img.shields.io/badge/%E2%99%A5_Support_My_OSS-Sponsor-e6926d?style=for-the-badge&logo=razorpay&logoColor=162b21&labelColor=244534" alt="Support My OSS" /></a>
-  <a href="https://github.com/OjasD07/SpringBored/releases/latest"><img src="https://img.shields.io/badge/Release-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Release v1.0.0" /></a>
+  <a href="https://github.com/OjasD07/SpringBored/releases"><img src="https://img.shields.io/badge/Release-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Release v1.0.0" /></a>
   <a href="https://springbored.ojasdeshpande.in/"><img src="https://img.shields.io/badge/Website-springbored.ojasdeshpande.in-f3ebd3?style=for-the-badge&labelColor=244534" alt="Official Website" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-84987c?style=for-the-badge&labelColor=244534" alt="Apache 2.0 License" /></a>
 </p>
@@ -54,11 +54,11 @@ To keep course completion separate from graded evaluations, SpringBored is split
 
 ## 📦 Installation (GitHub Releases)
 
-All official builds are distributed via [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases/latest). Because Chrome cannot load a `.zip` file directly in Developer Mode, extract the archive first:
+All official builds are distributed via [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases). Because Chrome cannot load a `.zip` file directly in Developer Mode, extract the archive first:
 
-1. Download the latest release archive from [**GitHub Releases (`v1.0.0`)**](https://github.com/OjasD07/SpringBored/releases/latest):
-   - `SpringBored-Course-v1.0.0.zip` *(Course Edition — 16× Video & Reading Completer)*
-   - `SpringBored-Assessment-v1.0.0.zip` *(Assessment Edition — Gemini AI Quiz & Assessment Solver)*
+1. Download the release archive from [**GitHub Releases (`v1.0.0`)**](https://github.com/OjasD07/SpringBored/releases):
+   - [**`SpringBored-Course-v1.0.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-course-v1.0.0) *(Course Edition — 16× Video & Reading Completer)*
+   - [**`SpringBored-Assessment-v1.0.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0) *(Assessment Edition — Gemini AI Quiz & Assessment Solver)*
    - Or clone the repository:
      ```bash
      git clone https://github.com/OjasD07/SpringBored.git

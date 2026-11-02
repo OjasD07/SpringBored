@@ -9,7 +9,7 @@
 <p align="left">
   <a href="https://github.com/OjasD07/SpringBored"><img src="https://img.shields.io/badge/%E2%98%85_Star_the_Repo-GitHub-e5a952?style=for-the-badge&logo=github&logoColor=162b21&labelColor=244534" alt="Star the Repo" /></a>
   <a href="https://sponsor.ojasdeshpande.in/"><img src="https://img.shields.io/badge/%E2%99%A5_Support_My_OSS-Sponsor-e6926d?style=for-the-badge&logo=razorpay&logoColor=162b21&labelColor=244534" alt="Support My OSS" /></a>
-  <a href="https://github.com/OjasD07/SpringBored/releases/latest"><img src="https://img.shields.io/badge/Release-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Release v1.0.0" /></a>
+  <a href="https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0"><img src="https://img.shields.io/badge/Release-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Release v1.0.0" /></a>
   <a href="https://springbored.ojasdeshpande.in/"><img src="https://img.shields.io/badge/Website-springbored.ojasdeshpande.in-f3ebd3?style=for-the-badge&labelColor=244534" alt="Official Website" /></a>
 </p>
 
@@ -65,7 +65,7 @@
 
 ## 🚀 Installation
 
-1. Download **`SpringBored-Assessment-v1.0.0.zip`** from [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases/latest) and extract it to a permanent folder, **or** clone the repository:
+1. Download **`SpringBored-Assessment-v1.0.0.zip`** from [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0) and extract it to a permanent folder, **or** clone the repository:
    ```bash
    git clone https://github.com/OjasD07/SpringBored.git
    ```

@@ -708,7 +708,7 @@ function renderUpdateBanner(info, dismissedVersion) {
     if (updateVersionBadge) updateVersionBadge.textContent = `v${info.latestVersion}`;
     if (updateBannerMsg) updateBannerMsg.textContent = `Update v${info.latestVersion} available`;
     if (updateDownloadLink) {
-      updateDownloadLink.href = info.releaseUrl || 'https://github.com/OjasD07/SpringBored/releases/latest';
+      updateDownloadLink.href = info.releaseUrl || 'https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0';
     }
   } else {
     updateBanner.hidden = true;
