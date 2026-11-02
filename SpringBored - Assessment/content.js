@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  if (window.__SPRINGBORED_ASSIGNMENT_LOADED__) return;
+  if (window.__SPRINGBORED_ASSESSMENT_LOADED__) return;
 
   // When running in the top-level frame, only activate on Infosys Springboard
   // or known assessment domains (child iframes may be hosted on any LTI/assessment origin).
@@ -26,7 +26,7 @@
     if (!allowedTopHost) return;
   }
 
-  window.__SPRINGBORED_ASSIGNMENT_LOADED__ = true;
+  window.__SPRINGBORED_ASSESSMENT_LOADED__ = true;
 
   // ─── State ────────────────────────────────────────────────────────────────
   let isRunning = false;
@@ -645,7 +645,7 @@ Respond ONLY with valid JSON:
   function isSameOriginChildFrame() {
     if (window === window.top) return false;
     try {
-      return Boolean(window.top && window.top.__SPRINGBORED_ASSIGNMENT_LOADED__);
+      return Boolean(window.top && window.top.__SPRINGBORED_ASSESSMENT_LOADED__);
     } catch (_) {
       return false;
     }
@@ -747,7 +747,7 @@ Respond ONLY with valid JSON:
       .catch(() => {});
     if (
       payload.message &&
-      (isRunning || document.getElementById("springbored-assignment-hud"))
+      (isRunning || document.getElementById("springbored-assessment-hud"))
     ) {
       const prog =
         payload.completed !== undefined && payload.total
@@ -917,7 +917,7 @@ Respond ONLY with valid JSON:
     progressText = "",
     isSolving = false,
   ) {
-    let hud = document.getElementById("springbored-assignment-hud");
+    let hud = document.getElementById("springbored-assessment-hud");
     if (!hud) {
       const fallbackLogoUrl =
         "data:image/svg+xml;utf8," +
@@ -932,7 +932,7 @@ Respond ONLY with valid JSON:
       } catch (_) {}
 
       hud = document.createElement("div");
-      hud.id = "springbored-assignment-hud";
+      hud.id = "springbored-assessment-hud";
       hud.innerHTML = `
         <div class="sb-hud-bar" id="sbHudBar">
           <div class="sb-hud-header" id="sbHudHeader" title="Drag to move anywhere">
@@ -1039,7 +1039,7 @@ Respond ONLY with valid JSON:
 
       const style = document.createElement("style");
       style.textContent = `
-        #springbored-assignment-hud {
+        #springbored-assessment-hud {
           position: fixed;
           bottom: 24px;
           right: 24px;
@@ -1062,7 +1062,7 @@ Respond ONLY with valid JSON:
           gap: 9px;
           transition: width 0.22s ease, max-height 0.22s ease;
         }
-        #springbored-assignment-hud.sb-hud-enlarged .sb-hud-bar {
+        #springbored-assessment-hud.sb-hud-enlarged .sb-hud-bar {
           width: 536px;
           max-width: calc(100vw - 36px);
           box-shadow: 0 22px 54px rgba(0, 0, 0, 0.68);
@@ -1259,7 +1259,7 @@ Respond ONLY with valid JSON:
           border-top: 1px solid #2e523f;
           max-height: 380px;
         }
-        #springbored-assignment-hud.sb-hud-enlarged .sb-hud-inspector {
+        #springbored-assessment-hud.sb-hud-enlarged .sb-hud-inspector {
           max-height: 560px;
         }
         .sb-hud-insp-header {
@@ -1343,7 +1343,7 @@ Respond ONLY with valid JSON:
           gap: 8px;
           padding-right: 4px;
         }
-        #springbored-assignment-hud.sb-hud-enlarged .sb-hud-stream-feed {
+        #springbored-assessment-hud.sb-hud-enlarged .sb-hud-stream-feed {
           max-height: 470px;
         }
         .sb-hud-stream-feed::-webkit-scrollbar {
@@ -2667,7 +2667,7 @@ Respond ONLY with valid JSON:
   // ═══════════════════════════════════════════════════════════════════════════
 
   const IGNORED_UI_SELECTOR =
-    '#springbored-assignment-hud, .palette, .question-palette, .palette-circle, .q-num, .circle, .sidebar, .left-sidebar, nav, .navbar, .modal-backdrop, .cdk-overlay-backdrop';
+    '#springbored-assessment-hud, .palette, .question-palette, .palette-circle, .q-num, .circle, .sidebar, .left-sidebar, nav, .navbar, .modal-backdrop, .cdk-overlay-backdrop';
 
   function isInsideIgnoredUi(el) {
     if (!el || typeof el.closest !== 'function') return true;
@@ -4395,7 +4395,7 @@ Respond ONLY with valid JSON:
       registerFrame(true);
       // Only mount the visual floating HUD in window.top so a child iframe does not
       // render a duplicate HUD inside the inner frame.
-      if (window === window.top && !document.getElementById("springbored-assignment-hud")) {
+      if (window === window.top && !document.getElementById("springbored-assessment-hud")) {
         createOrUpdateHud("Ready to solve", "", false);
       }
     }
@@ -4489,7 +4489,7 @@ Respond ONLY with valid JSON:
         if (isRunning && !isPaused) {
           isPaused = true;
           sendStatus({ status: "paused", message: "Paused." });
-        } else if (window === window.top && document.getElementById("springbored-assignment-hud")) {
+        } else if (window === window.top && document.getElementById("springbored-assessment-hud")) {
           createOrUpdateHud("Paused.", "", false);
         }
         sendResponse({ ok: true });
@@ -4499,7 +4499,7 @@ Respond ONLY with valid JSON:
         if (isRunning && isPaused) {
           isPaused = false;
           sendStatus({ status: "running", message: "Resumed." });
-        } else if (window === window.top && document.getElementById("springbored-assignment-hud")) {
+        } else if (window === window.top && document.getElementById("springbored-assessment-hud")) {
           createOrUpdateHud("Resumed.", "", true);
         }
         sendResponse({ ok: true });
@@ -4515,7 +4515,7 @@ Respond ONLY with valid JSON:
           sendStatus({ status: "stopped", message: "Stopped." });
         }
         const existingHud = document.getElementById(
-          "springbored-assignment-hud",
+          "springbored-assessment-hud",
         );
         if (existingHud) existingHud.remove();
         sendResponse({ ok: true });

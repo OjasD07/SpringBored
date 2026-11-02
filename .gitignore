@@ -1,1 +1,26 @@
+# macOS / Windows / Linux OS artifacts
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+Desktop.ini
+
+# Environment & local secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Packaged extension archives & build artifacts
+*.zip
+*.crx
+dist/
+build/
+node_modules/
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
