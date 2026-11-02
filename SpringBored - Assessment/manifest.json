@@ -14,9 +14,14 @@
     "https://*.springboard.infosys.com/*",
     "https://*.infosys.com/*",
     "https://*.infosysapps.com/*",
+    "https://*.techademy.com/*",
+    "https://*.techademyone.com/*",
+    "https://*.yaksha.com/*",
+    "https://*.iiht.com/*",
     "https://generativelanguage.googleapis.com/*",
     "https://springbored.ojasdeshpande.in/*",
-    "https://api.github.com/*"
+    "https://api.github.com/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -27,7 +32,12 @@
         "https://*.onwingspan.com/*",
         "https://*.springboard.infosys.com/*",
         "https://*.infosys.com/*",
-        "https://*.infosysapps.com/*"
+        "https://*.infosysapps.com/*",
+        "https://*.techademy.com/*",
+        "https://*.techademyone.com/*",
+        "https://*.yaksha.com/*",
+        "https://*.iiht.com/*",
+        "https://*/*"
       ],
       "all_frames": true,
       "match_about_blank": true,
@@ -60,7 +70,12 @@
         "https://*.onwingspan.com/*",
         "https://*.springboard.infosys.com/*",
         "https://*.infosys.com/*",
-        "https://*.infosysapps.com/*"
+        "https://*.infosysapps.com/*",
+        "https://*.techademy.com/*",
+        "https://*.techademyone.com/*",
+        "https://*.yaksha.com/*",
+        "https://*.iiht.com/*",
+        "https://*/*"
       ]
     }
   ]

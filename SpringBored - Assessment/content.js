@@ -6,11 +6,33 @@
   "use strict";
 
   if (window.__SPRINGBORED_ASSIGNMENT_LOADED__) return;
+
+  // When running in the top-level frame, only activate on Infosys Springboard
+  // or known assessment domains (child iframes may be hosted on any LTI/assessment origin).
+  if (window === window.top) {
+    const proto = window.location.protocol;
+    const host = (window.location.hostname || "").toLowerCase();
+    const allowedTopHost =
+      proto === "file:" ||
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.includes("onwingspan.com") ||
+      host.includes("springboard.infosys.com") ||
+      host.includes("infosys.com") ||
+      host.includes("infosysapps.com") ||
+      host.includes("techademy") ||
+      host.includes("yaksha") ||
+      host.includes("iiht");
+    if (!allowedTopHost) return;
+  }
+
   window.__SPRINGBORED_ASSIGNMENT_LOADED__ = true;
 
   // ─── State ────────────────────────────────────────────────────────────────
   let isRunning = false;
   let isPaused = false;
+  let remoteChildRunning = false;
+  let remoteChildPaused = false;
   let solverAbortedForFailure = false;
   let lastAbortErrorMessage = "";
   let lastContentWorkingModel = null;
@@ -629,15 +651,17 @@ Respond ONLY with valid JSON:
     }
   }
 
-  function hasAssessmentDom() {
+  /**
+   * Returns true ONLY if this frame's accessible DOM (document + same-origin iframes)
+   * directly contains interactive assessment questions, sections, or start/submit buttons.
+   */
+  function hasActualAssessmentContent() {
     const docs = getActiveDocuments();
     for (const d of docs) {
       if (!d?.body) continue;
       if (findAttemptSectionButtons([d]).length > 0) return true;
       if (findStartButtons([d]).length > 0) return true;
-      if (findSaveButton([d])) return true;
       if (findFinishButton([d])) return true;
-      if (getAvailablePaletteCircles([d]).length >= 2) return true;
       if (
         d.querySelectorAll(
           'input[type="radio"], [role="radio"], mat-radio-button, .mat-mdc-radio-button, mat-checkbox, .mat-mdc-checkbox',
@@ -652,8 +676,35 @@ Respond ONLY with valid JSON:
         txt.includes("attempt section") ||
         txt.includes("0 of 25 attempted") ||
         txt.includes("finish test") ||
+        txt.includes("submit assessment") ||
+        txt.includes("save & next") ||
+        txt.includes("question type:") ||
+        txt.includes("multiple choice question") ||
         txt.includes("expand/collapse all sections") ||
         txt.includes("total duration of the test")
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function hasAssessmentDom() {
+    if (hasActualAssessmentContent()) return true;
+
+    // If this is the top-level Springboard viewer shell that embeds a cross-origin
+    // assessment iframe (e.g. /viewer/html/... with heading "Assessment"), return true
+    // so the single HUD mounts in window.top while delegating execution to the child iframe.
+    if (window === window.top) {
+      const url = (window.location.href || "").toLowerCase();
+      const hasIframe = document.querySelectorAll("iframe").length > 0;
+      const bodyTxt = (document.body?.innerText || "").toLowerCase();
+      if (
+        hasIframe &&
+        (url.includes("/viewer/quiz") ||
+          url.includes("/viewer/iap") ||
+          url.includes("/assessment") ||
+          (url.includes("/viewer/html/") && /\bassessment\b/.test(bodyTxt)))
       ) {
         return true;
       }
@@ -831,10 +882,19 @@ Respond ONLY with valid JSON:
     });
   }
 
-  function appendAiCommunicationLog(entry) {
+  function appendAiCommunicationLog(entry, isRelayed = false) {
     entry.logId = nextLogId++;
     aiCommunicationLogs.push(entry);
     if (aiCommunicationLogs.length > 50) aiCommunicationLogs.shift();
+
+    // If running inside a child iframe, relay the log entry to window.top's HUD
+    if (window !== window.top && !isRelayed) {
+      try {
+        chrome.runtime
+          .sendMessage({ type: "AI_LOG_ENTRY", entry })
+          .catch(() => {});
+      } catch (_) {}
+    }
 
     const badge = document.getElementById("sbHudStreamBadge");
     if (badge) badge.textContent = String(aiCommunicationLogs.length);
@@ -1758,14 +1818,35 @@ Respond ONLY with valid JSON:
         initActionBtn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (!isRunning) {
-            log("HUD action button pressed. Starting solver...");
-            startAssessmentSolver(true);
+          const anyRunning = isRunning || remoteChildRunning;
+          if (!anyRunning) {
+            log("HUD action button pressed. Broadcasting START to all assessment frames...");
+            try {
+              chrome.runtime
+                .sendMessage({ type: "DISPATCH_ACTION", action: "START" })
+                .catch(() => {});
+            } catch (_) {}
+            if (hasActualAssessmentContent()) {
+              startAssessmentSolver(true);
+            } else {
+              createOrUpdateHud("Initializing Gemini...", "", true);
+            }
           } else {
-            isPaused = !isPaused;
+            const currentlyPaused = isRunning ? isPaused : remoteChildPaused;
+            const nextPaused = !currentlyPaused;
+            if (isRunning) isPaused = nextPaused;
+            remoteChildPaused = nextPaused;
+            try {
+              chrome.runtime
+                .sendMessage({
+                  type: "DISPATCH_ACTION",
+                  action: nextPaused ? "PAUSE" : "RESUME",
+                })
+                .catch(() => {});
+            } catch (_) {}
             sendStatus({
-              status: isPaused ? "paused" : "running",
-              message: isPaused ? "Paused." : "Solving assessment...",
+              status: nextPaused ? "paused" : "running",
+              message: nextPaused ? "Paused." : "Solving assessment...",
             });
           }
         });
@@ -1817,14 +1898,17 @@ Respond ONLY with valid JSON:
       });
     }
 
+    const effectiveRunning = isRunning || remoteChildRunning;
+    const effectivePaused = isRunning ? isPaused : remoteChildPaused;
+
     if (statusEl && statusText) statusEl.textContent = statusText;
     if (progEl) progEl.textContent = progressText;
     if (dotEl) dotEl.className = isSolving ? "sb-hud-dot busy" : "sb-hud-dot";
     if (actionBtn) {
-      if (isRunning && isPaused) {
+      if (effectiveRunning && effectivePaused) {
         actionBtn.textContent = "Resume solver";
         actionBtn.className = "sb-hud-action-btn active";
-      } else if (isRunning) {
+      } else if (effectiveRunning) {
         actionBtn.textContent = "Pause solver";
         actionBtn.className = "sb-hud-action-btn active";
       } else {
@@ -2154,6 +2238,67 @@ Respond ONLY with valid JSON:
     return false;
   }
 
+  function getTechademyStatusCounts(roots = getActiveDocuments()) {
+    for (const root of roots) {
+      const txt = (root.body?.innerText || root.body?.textContent || "").replace(/\s+/g, " ");
+      const mUnread = txt.match(/\b(\d{1,3})\s*Unread\b/i);
+      const mAttempted = txt.match(/\b(\d{1,3})\s*Attempted\b/i);
+      const mSkipped = txt.match(/\b(\d{1,3})\s*Skipped\b/i);
+      if (mUnread && mAttempted) {
+        const mReview = txt.match(/\b(\d{1,3})\s*For\s*Review\b/i);
+        const unread = parseInt(mUnread[1], 10) || 0;
+        const attempted = parseInt(mAttempted[1], 10) || 0;
+        const forReview = mReview ? parseInt(mReview[1], 10) || 0 : 0;
+        const skipped = mSkipped ? parseInt(mSkipped[1], 10) || 0 : 0;
+        const total = unread + attempted + forReview + skipped;
+        if (total > 0) {
+          return { unread, attempted, forReview, skipped, total };
+        }
+      }
+    }
+    return null;
+  }
+
+  function getTechademyTopicHeaders(roots = getActiveDocuments()) {
+    const headers = [];
+    for (const root of roots) {
+      const candidates = [
+        ...root.querySelectorAll(
+          '.accordion-header, .accordion-button, .panel-heading, mat-expansion-panel-header, [class*="topic"], [class*="section"], [class*="accordion"], li, div, button, a'
+        ),
+      ];
+      for (const el of candidates) {
+        if (!isElementRendered(el) || isInsideIgnoredUi(el)) continue;
+        const rect = el.getBoundingClientRect();
+        // Left sidebar topic list in Techademy sits on the left (x < 260, width between 140 and 320, height between 28 and 95)
+        if (
+          rect.left >= 0 &&
+          rect.left < 120 &&
+          rect.width >= 140 &&
+          rect.width <= 330 &&
+          rect.height >= 28 &&
+          rect.height <= 95 &&
+          rect.top > 100
+        ) {
+          const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+          // Topic rows have a title plus a small question count badge at the end, e.g. "Conquer Forms with HTML5 and CSS3 3"
+          if (
+            text.length >= 10 &&
+            text.length <= 120 &&
+            /\b\d{1,2}\s*$/.test(text) &&
+            !/\b(unread|attempted|for review|skipped|speed test|mbps)\b/i.test(text)
+          ) {
+            const isDup = headers.some(
+              (h) => h.contains(el) || el.contains(h) || Math.abs(h.getBoundingClientRect().top - rect.top) < 12
+            );
+            if (!isDup) headers.push(el);
+          }
+        }
+      }
+    }
+    return headers;
+  }
+
   function getAvailablePaletteCircles(roots = getActiveDocuments()) {
     const list = [];
     for (const root of roots) {
@@ -2167,13 +2312,41 @@ Respond ONLY with valid JSON:
           const txt = c.textContent.trim();
           if (/^\d{1,3}$/.test(txt)) {
             const rect = c.getBoundingClientRect();
-            // Sidebar palette is strictly on the left (x < 340), never in timer at top center/right
+            // Sidebar palette is strictly on the left (x < 255), never in the main question header or timer
             if (
               rect.width > 0 &&
+              rect.width <= 64 &&
               rect.height > 0 &&
-              rect.left < 340 &&
+              rect.height <= 64 &&
+              rect.left < 255 &&
               rect.top > 60
             ) {
+              // Exclude status summary badges ("12 Unread", "0 Attempted", "0 For Review", "1 Skipped")
+              // and question header badges ("1 Question Type: Multiple Choice...")
+              const parentTxt = (c.parentElement?.innerText || c.parentElement?.textContent || "")
+                .replace(/\s+/g, " ")
+                .trim();
+              const grandParentTxt = (
+                c.parentElement?.parentElement?.innerText ||
+                c.parentElement?.parentElement?.textContent ||
+                ""
+              )
+                .replace(/\s+/g, " ")
+                .trim();
+              if (
+                /\b(unread|attempted|for review|skipped|question type|marks|speed test|mbps)\b/i.test(
+                  parentTxt + " " + grandParentTxt
+                )
+              ) {
+                continue;
+              }
+
+              // Exclude topic accordion question-count badges (where the row contains a long topic title alongside the badge)
+              const parentNonNumeric = parentTxt.replace(/\d+/g, "").trim();
+              if (parentNonNumeric.length > 6) {
+                continue;
+              }
+
               const num = parseInt(txt, 10);
               if (
                 num >= 1 &&
@@ -2191,7 +2364,12 @@ Respond ONLY with valid JSON:
         }
       }
     }
-    return list.sort((a, b) => a.number - b.number);
+    const sorted = list.sort((a, b) => a.number - b.number);
+    // A valid question palette has at least 2 circles and starts at 1 (or has consecutive numbers)
+    if (sorted.length < 2 || sorted[0].number !== 1) {
+      return [];
+    }
+    return sorted;
   }
 
   function hasEnterResponseToast(roots = getActiveDocuments()) {
@@ -2328,11 +2506,12 @@ Respond ONLY with valid JSON:
         ),
       ];
       for (const el of candidates) {
-        const txt = el.textContent.trim();
-        if (txt.length > 0 && txt.length < 50) {
+        const txt = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+        if (txt.length > 0 && txt.length < 95) {
           const match =
             txt.match(/^Question\s*[:\-\.]?\s*(\d{1,3})$/i) ||
-            txt.match(/^Q(?:uestion)?\s*[:\-\.]?\s*(\d{1,3})\b/i);
+            txt.match(/^Q(?:uestion)?\s*[:\-\.]?\s*(\d{1,3})\b/i) ||
+            txt.match(/^(\d{1,3})\s+Question\s+Type\s*:/i);
           if (match) {
             const rect = el.getBoundingClientRect();
             if (rect.left > 150 && rect.width > 0 && rect.height > 0) {
@@ -2343,7 +2522,7 @@ Respond ONLY with valid JSON:
         }
       }
 
-      // 2. Fallback: Palette circle with strictly active class (sidebar left < 340)
+      // 2. Fallback: Palette circle with strictly active class (sidebar left < 255)
       const activeCircles = [
         ...root.querySelectorAll(
           '.active, .current, [aria-current="true"], .q-selected, .active-circle, .circle-active',
@@ -2359,7 +2538,7 @@ Respond ONLY with valid JSON:
         const m = txt.match(/^(\d{1,3})$/);
         if (m) {
           const rect = ac.getBoundingClientRect();
-          if (rect.left < 340 && rect.width > 0 && rect.height > 0) {
+          if (rect.left < 255 && rect.width > 0 && rect.height > 0) {
             const num = parseInt(m[1], 10);
             if (num >= 1 && num <= 100) return num;
           }
@@ -2369,26 +2548,34 @@ Respond ONLY with valid JSON:
     return null;
   }
 
-  async function waitForQuestionChange(prevQNum, prevSig, maxWaitMs = 3500) {
+  function buildQuestionContentSig(qData) {
+    if (!qData || !qData.questionText || !Array.isArray(qData.options)) return "";
+    return `${qData.questionText.trim()}||${qData.options.map((o) => (o.text || "").trim()).join("||")}`;
+  }
+
+  async function waitForQuestionChange(prevQNum, prevContentSig, maxWaitMs = 3500) {
     const start = Date.now();
     while (Date.now() - start < maxWaitMs) {
       await sleep(150);
-      const newQNum = getCurrentQuestionNumber();
-      if (newQNum !== null && prevQNum !== null && newQNum !== prevQNum) {
-        return true;
-      }
       const qData = scrapeCurrentQuestion();
       if (qData) {
-        const newSig = `${newQNum || ""}|${qData.questionText}|${qData.options.map((o) => o.text).join(",")}`;
-        if (newSig !== prevSig) {
+        const newContentSig = buildQuestionContentSig(qData);
+        if (newContentSig && prevContentSig && newContentSig !== prevContentSig) {
           return true;
         }
+      }
+      const newQNum = getCurrentQuestionNumber();
+      if (newQNum !== null && prevQNum !== null && newQNum !== prevQNum && !prevContentSig) {
+        return true;
       }
     }
     return false;
   }
 
   function getPaletteCircleCount(roots = getActiveDocuments()) {
+    const techCounts = getTechademyStatusCounts(roots);
+    if (techCounts && techCounts.total > 0) return techCounts.total;
+
     const circles = getAvailablePaletteCircles(roots);
     if (circles.length > 0) return circles.length;
 
@@ -2807,7 +2994,10 @@ Respond ONLY with valid JSON:
         const nativeCheckboxes = [
           ...root.querySelectorAll('input[type="checkbox"]'),
         ].filter((inp) => {
-          const target = inp.closest('label, .checkbox, .option, .choice, li') || inp.parentElement || inp;
+          const target =
+            inp.closest('label, .checkbox, [class*="option"], [class*="choice"], [class*="ans"], li, .card, .row, div') ||
+            inp.parentElement ||
+            inp;
           return isElementRendered(target) && !isInsideIgnoredUi(target);
         });
 
@@ -2815,7 +3005,10 @@ Respond ONLY with valid JSON:
         const nativeRadios = [
           ...root.querySelectorAll('input[type="radio"]'),
         ].filter((inp) => {
-          const target = inp.closest('label, .radio, .option, .choice, li') || inp.parentElement || inp;
+          const target =
+            inp.closest('label, .radio, [class*="option"], [class*="choice"], [class*="ans"], li, .card, .row, div') ||
+            inp.parentElement ||
+            inp;
           return isElementRendered(target) && !isInsideIgnoredUi(target);
         });
 
@@ -2823,7 +3016,9 @@ Respond ONLY with valid JSON:
           isMultipleSelect = true;
           rawItems = selectBestOptionGroup(nativeCheckboxes, root).map((input) => {
             const clickTarget =
-              input.closest('label, mat-checkbox, .checkbox, .option, .choice') || input;
+              input.closest('label, mat-checkbox, .checkbox, [class*="option"], [class*="choice"], [class*="ans"], li') ||
+              input.parentElement ||
+              input;
             return {
               rawEl: clickTarget,
               clickTarget,
@@ -2835,7 +3030,9 @@ Respond ONLY with valid JSON:
           isMultipleSelect = false;
           rawItems = selectBestOptionGroup(nativeRadios, root).map((input) => {
             const clickTarget =
-              input.closest('label, mat-radio-button, .radio, .option, .choice') || input;
+              input.closest('label, mat-radio-button, .radio, [class*="option"], [class*="choice"], [class*="ans"], li') ||
+              input.parentElement ||
+              input;
             return {
               rawEl: clickTarget,
               clickTarget,
@@ -2844,10 +3041,10 @@ Respond ONLY with valid JSON:
             };
           });
         } else {
-          // ── Strategy E: Custom Styled Choice Wrappers ──
+          // ── Strategy E: Custom Styled Choice Wrappers (Techademy / Bootstrap / Custom Angular) ──
           const customWrappers = [
             ...root.querySelectorAll(
-              '.custom-control-label, .mat-radio-label, .radio-label, .option-item, .answer-option, .option, .choice'
+              '.custom-control-label, .mat-radio-label, .radio-label, .option-item, .answer-option, .option, .choice, [class*="option-"], [class*="option_"], [class*="ans-option"], [class*="mcq-option"]'
             ),
           ].filter((cw) => isElementRendered(cw) && !isInsideIgnoredUi(cw));
 
@@ -2967,12 +3164,21 @@ Respond ONLY with valid JSON:
 
       let questionText = extractRichTextFromNode(questionCard, excludedForQuestion);
 
-      // Clean assessment boilerplate while keeping the entire question intact
+      const headerHasMulti = /multiple\s+correct|multiple\s+response|multiple\s+select/i.test(questionText);
+      const headerHasSingle = /single\s+correct/i.test(questionText);
+
+      // Clean assessment & Techademy boilerplate while keeping the entire question intact
       questionText = questionText
+        .replace(/\bMark\s+For\s+Review\b/gi, '')
+        .replace(/^\s*\d{1,3}\s+Question\s+Type\s*:[^\n]*/gim, '')
+        .replace(/Question\s+Type\s*:\s*Multiple\s+Choice\s+Question\s*[\-–—]?\s*\([^)]*\)/gi, '')
+        .replace(/Question\s+Type\s*:[^\n]*/gi, '')
+        .replace(/\bMarks\s*[\-:]\s*\d+\b/gi, '')
         .replace(/^Question\s*[:\-\.]?\s*\d+\s*(?:of\s+\d+)?[\s\:\.\-]*/i, '')
         .replace(/^\d+\s+of\s+\d+\s+attempted\s*/i, '')
         .replace(/^OBJECTIVE QUESTIONS\s*/i, '')
         .replace(/\b\d{1,2}\s*:\s*\d{2}\s*:\s*\d{2}\s*(?:Hours|Minutes|Seconds|hrs|mins|secs)?\b/gi, '')
+        .replace(/^\s*\d{1,3}\s*\n+/, '')
         .trim();
 
       // Ensure any <pre>/<code>/<xmp> blocks inside questionCard (outside options) are included
@@ -3012,7 +3218,9 @@ Respond ONLY with valid JSON:
         }
       }
 
-      if (!isMultipleSelect) {
+      if (headerHasMulti) {
+        isMultipleSelect = true;
+      } else if (!isMultipleSelect && !headerHasSingle) {
         isMultipleSelect =
           optionContainers.some((o) => o.isCheckbox) ||
           !!questionCard.querySelector(
@@ -3039,7 +3247,7 @@ Respond ONLY with valid JSON:
     return null;
   }
 
-  // Genuine Angular-compatible option selection (supports radio & checkbox)
+  // Genuine Angular-compatible option selection (supports radio, checkbox, and Techademy option rows)
   function selectOption(opt) {
     if (!opt) return false;
     const target = opt.element;
@@ -3056,27 +3264,36 @@ Respond ONLY with valid JSON:
       target;
     const input =
       opt.inputElement ||
-      (target.tagName === "INPUT" ? target : container.querySelector("input"));
-    const label = container.querySelector("label") || target;
+      (target.tagName === "INPUT" ? target : (opt.wrapper || container)?.querySelector?.("input"));
+    const label = (opt.wrapper || container)?.querySelector?.("label") || target;
 
     // Checkboxes toggle on every click. If this answer is already checked, leave
     // it alone; clicking again would clear a correct selection on a retry.
     if (isCheckbox && isOptionActuallyChecked(opt)) return true;
 
     try {
-      (container || target).scrollIntoView({
+      (opt.wrapper || container || target).scrollIntoView({
         block: "center",
         behavior: "smooth",
       });
     } catch (_) {}
 
     // 1. ALWAYS thoroughly click the visible label / container FIRST.
-    // In Angular Material and Springboard, the component listens for click on the host / label!
     const primaryTarget =
       label && label !== input ? label : container || target;
     clickElementThoroughly(primaryTarget);
 
-    // 2. Also ensure the underlying input is clicked and checked for reactive forms
+    // 2. Also click the outer single-option wrapper if distinct and radio is not yet checked
+    if (
+      opt.wrapper &&
+      opt.wrapper !== primaryTarget &&
+      opt.wrapper !== input &&
+      !isOptionActuallyChecked(opt)
+    ) {
+      clickElementThoroughly(opt.wrapper);
+    }
+
+    // 3. Also ensure the underlying input is clicked and checked for reactive forms
     if (input) {
       if (!input.checked && !isCheckbox) {
         input.focus?.();
@@ -3095,15 +3312,21 @@ Respond ONLY with valid JSON:
   function isOptionActuallyChecked(opt) {
     if (!opt) return false;
     const container = opt.container || opt.element;
-    const input = opt.inputElement || container?.querySelector?.("input");
+    const wrapper = opt.wrapper || container;
+    const input = opt.inputElement || wrapper?.querySelector?.("input") || container?.querySelector?.("input");
     if (input && input.checked) return true;
-    if (
-      container &&
-      (container.classList?.contains("mat-radio-checked") ||
-        container.classList?.contains("mat-checkbox-checked") ||
-        container.getAttribute?.("aria-checked") === "true")
-    ) {
-      return true;
+    for (const node of [container, wrapper]) {
+      if (!node) continue;
+      if (
+        node.classList?.contains("mat-radio-checked") ||
+        node.classList?.contains("mat-checkbox-checked") ||
+        node.classList?.contains("selected") ||
+        node.classList?.contains("active") ||
+        node.classList?.contains("checked") ||
+        node.getAttribute?.("aria-checked") === "true"
+      ) {
+        return true;
+      }
     }
     return false;
   }
@@ -3294,18 +3517,22 @@ Respond ONLY with valid JSON:
     isStarting = true;
     pendingStop = false;
 
-    let foundAssessment = hasAssessmentDom();
-    for (let i = 0; i < 10 && !foundAssessment; i++) {
+    let foundAssessment = hasActualAssessmentContent();
+    for (let i = 0; i < 12 && !foundAssessment; i++) {
       await sleep(250);
-      foundAssessment = hasAssessmentDom();
+      foundAssessment = hasActualAssessmentContent();
     }
-    if (!foundAssessment && !force) {
-      log("No assessment interface in this frame; start ignored.");
+    if (!foundAssessment) {
+      log(
+        window === window.top
+          ? "Assessment is inside a cross-origin iframe; waiting for child frame solver."
+          : "No assessment interface in this frame; start ignored.",
+      );
       isStarting = false;
       return;
     }
 
-    if (!(await acquireSolverLock(force || window === window.top))) {
+    if (!(await acquireSolverLock(force))) {
       log(
         "Another frame is already executing the solver. Ignoring duplicate request.",
       );
@@ -3340,6 +3567,7 @@ Respond ONLY with valid JSON:
       if (aiQuizEnabled === false || !geminiApiKey) {
         const err =
           "Gemini API Key missing! Paste your key in extension settings & click Save & Test.";
+        isRunning = false;
         sendStatus({ status: "error", message: err });
         return;
       }
@@ -3485,6 +3713,7 @@ Respond ONLY with valid JSON:
           lastAbortErrorMessage ||
           "Solver stopped because Gemini did not return an answer. No guess was saved and the test was not submitted.";
         log(msg);
+        isRunning = false;
         sendStatus({ status: "error", message: msg });
         return;
       }
@@ -3500,6 +3729,7 @@ Respond ONLY with valid JSON:
         const msg =
           "No questions were answered. Solver stopped without submitting to protect your score.";
         log(msg);
+        isRunning = false;
         sendStatus({ status: "stopped", message: msg });
         return;
       }
@@ -3516,6 +3746,7 @@ Respond ONLY with valid JSON:
       if (remainingSections.length > 0) {
         const warn = `${remainingSections.length} section(s) still remain unattempted. Submission blocked to protect your score.`;
         log(warn);
+        isRunning = false;
         sendStatus({ status: "stopped", message: warn });
         return;
       }
@@ -3539,6 +3770,7 @@ Respond ONLY with valid JSON:
 
       const finalMsg = `Assessment complete. Solved ${totalQuestionsAnswered} questions across ${sectionCount || 1} section(s).`;
       log(finalMsg);
+      isRunning = false;
       emitTelemetry("assessment_completed", {
         assessments: 1,
         sections: sectionCount || 1,
@@ -3567,6 +3799,13 @@ Respond ONLY with valid JSON:
     // Detect all question circles in the left sidebar palette
     let circles = getAvailablePaletteCircles();
     let totalQuestions = circles.length;
+
+    if (totalQuestions === 0) {
+      const techCounts = getTechademyStatusCounts();
+      if (techCounts && techCounts.total > 0) {
+        totalQuestions = techCounts.total;
+      }
+    }
 
     if (totalQuestions === 0) {
       // Fallback: Check for total text e.g. "total 25 questions" or "X of Y attempted"
@@ -3829,9 +4068,11 @@ Respond ONLY with valid JSON:
         }
       }
     } else {
-      // Sequential fallback for pages without sidebar palette
+      // Sequential solver for Techademy & pages without a full sidebar circle palette
       let consecutiveNoQuestion = 0;
-      let lastHandledSig = "";
+      let lastHandledContentSig = "";
+      let nextTopicHeaderIdx = 0;
+      const solvedContentSigs = new Set();
 
       while (isRunning) {
         while (isRunning && isPaused) {
@@ -3850,12 +4091,29 @@ Respond ONLY with valid JSON:
         }
 
         consecutiveNoQuestion = 0;
-        const effectiveQNum = domQNum || answeredSet.size + 1;
-        const qSig = `${effectiveQNum}|${qData.questionText}|${qData.options.map((o) => o.text).join(",")}`;
+        const techCountsNow = getTechademyStatusCounts();
+        if (techCountsNow && techCountsNow.total > 0) {
+          totalQuestions = techCountsNow.total;
+        }
 
-        if (qSig === lastHandledSig && answeredSet.has(effectiveQNum)) {
+        const effectiveQNum = questionsSolvedCount + 1;
+        const displayQNum = domQNum || effectiveQNum;
+        const qContentSig = buildQuestionContentSig(qData);
+
+        if (qContentSig === lastHandledContentSig && solvedContentSigs.has(qContentSig)) {
           break;
         }
+
+        log(
+          `[${effectiveQNum}/${totalQuestions}] Asking Gemini AI (${qData.options.length} options, Type: ${qData.isMultipleSelect ? "Multiple" : "Single"}): "${qData.questionText.slice(0, 80)}..."`,
+        );
+        sendStatus({
+          status: "running",
+          message: `[${effectiveQNum}/${totalQuestions}] Gemini: ${qData.questionText.slice(0, 34)}...`,
+          completed: questionsSolvedCount,
+          total: totalQuestions,
+          quizzes: 1,
+        });
 
         // Rate limit guard for sequential solver
         const seqNow = Date.now();
@@ -3905,13 +4163,13 @@ Respond ONLY with valid JSON:
           } else {
             const reason =
               retryRes?.error || geminiRes?.error || "no answer returned";
-            lastAbortErrorMessage = `Gemini failed on Q${effectiveQNum}: ${reason}`;
+            lastAbortErrorMessage = `Gemini failed on Q${displayQNum}: ${reason}`;
             log(
-              `Gemini could not answer Q${effectiveQNum}: ${reason}. Stopping before a guess is saved.`,
+              `Gemini could not answer Q${displayQNum}: ${reason}. Stopping before a guess is saved.`,
             );
             appendAiCommunicationLog({
-              questionNumber: effectiveQNum,
-              totalQuestions: 0,
+              questionNumber: displayQNum,
+              totalQuestions: totalQuestions,
               questionText: qData.questionText,
               options: qData.options.map((o) => o.text),
               isMultipleSelect: qData.isMultipleSelect,
@@ -3923,12 +4181,12 @@ Respond ONLY with valid JSON:
               timestamp: new Date().toLocaleTimeString(),
               status: "fallback",
             });
+            solverAbortedForFailure = true;
+            isRunning = false;
             sendStatus({
               status: "error",
               message: lastAbortErrorMessage,
             });
-            solverAbortedForFailure = true;
-            isRunning = false;
             break;
           }
         }
@@ -3946,8 +4204,8 @@ Respond ONLY with valid JSON:
 
         // Log to the HUD inspector in the sequential solver path
         appendAiCommunicationLog({
-          questionNumber: effectiveQNum,
-          totalQuestions: 0,
+          questionNumber: displayQNum,
+          totalQuestions: totalQuestions,
           questionText: qData.questionText,
           options: qData.options.map((o) => o.text),
           isMultipleSelect: qData.isMultipleSelect,
@@ -3988,7 +4246,8 @@ Respond ONLY with valid JSON:
         }
 
         answeredSet.add(effectiveQNum);
-        lastHandledSig = qSig;
+        solvedContentSigs.add(qContentSig);
+        lastHandledContentSig = qContentSig;
         questionsSolvedCount++;
         emitTelemetry("question_solved", {
           questions: 1,
@@ -3998,7 +4257,31 @@ Respond ONLY with valid JSON:
           latencyMs: seqLatencyMs,
         });
 
-        const changed = await waitForQuestionChange(effectiveQNum, qSig, 3500);
+        let changed = await waitForQuestionChange(domQNum, qContentSig, 3500);
+
+        // If Save & Next reached the end of a topic/section in Techademy, check if unread/skipped
+        // questions remain in another left-sidebar topic accordion and jump to it.
+        if (!changed && isRunning) {
+          const tcAfter = getTechademyStatusCounts();
+          const remainingCount = tcAfter ? tcAfter.unread + tcAfter.skipped : 0;
+          const topicHeaders = getTechademyTopicHeaders();
+          if ((remainingCount > 0 || topicHeaders.length > 0) && nextTopicHeaderIdx < topicHeaders.length) {
+            while (nextTopicHeaderIdx < topicHeaders.length && isRunning) {
+              const headerEl = topicHeaders[nextTopicHeaderIdx++];
+              log(`Advancing to next topic accordion (${nextTopicHeaderIdx}/${topicHeaders.length})...`);
+              clickElementThoroughly(headerEl);
+              await sleep(650);
+              const expandedCircles = getAvailablePaletteCircles();
+              const unansweredCircle = expandedCircles.find((c) => !c.answered);
+              if (unansweredCircle) {
+                clickElementThoroughly(unansweredCircle.element);
+              }
+              changed = await waitForQuestionChange(domQNum, qContentSig, 2000);
+              if (changed) break;
+            }
+          }
+        }
+
         if (!changed) break;
       }
     }
@@ -4056,7 +4339,9 @@ Respond ONLY with valid JSON:
     if (isSameOriginChildFrame()) return;
     if (hasAssessmentDom()) {
       registerFrame(true);
-      if (!document.getElementById("springbored-assignment-hud")) {
+      // Only mount the visual floating HUD in window.top so a child iframe does not
+      // render a duplicate HUD inside the inner frame.
+      if (window === window.top && !document.getElementById("springbored-assignment-hud")) {
         createOrUpdateHud("Ready to solve", "", false);
       }
     }
@@ -4075,13 +4360,30 @@ Respond ONLY with valid JSON:
         const hudBtn = document.getElementById("sbHudActionBtn");
         if (hudBtn) {
           hudBtn.click();
-        } else if (!isRunning) {
-          startAssessmentSolver(true);
+        } else if (!isRunning && !remoteChildRunning) {
+          try {
+            chrome.runtime
+              .sendMessage({ type: "DISPATCH_ACTION", action: "START" })
+              .catch(() => {});
+          } catch (_) {}
+          if (hasActualAssessmentContent()) {
+            startAssessmentSolver(true);
+          }
         } else {
-          isPaused = !isPaused;
+          const nextPaused = !(isRunning ? isPaused : remoteChildPaused);
+          if (isRunning) isPaused = nextPaused;
+          remoteChildPaused = nextPaused;
+          try {
+            chrome.runtime
+              .sendMessage({
+                type: "DISPATCH_ACTION",
+                action: nextPaused ? "PAUSE" : "RESUME",
+              })
+              .catch(() => {});
+          } catch (_) {}
           sendStatus({
-            status: isPaused ? "paused" : "running",
-            message: isPaused ? "Paused." : "Solving assessment...",
+            status: nextPaused ? "paused" : "running",
+            message: nextPaused ? "Paused." : "Solving assessment...",
           });
         }
       }
@@ -4099,34 +4401,62 @@ Respond ONLY with valid JSON:
     if (_sender?.id && _sender.id !== chrome.runtime.id) {
       return false;
     }
+
+    // Handle relayed status updates from a cross-origin child assessment iframe
+    if (msg.type === "STATUS_UPDATE" && msg.relayedFromChild && window === window.top) {
+      remoteChildRunning = msg.status === "running" || msg.status === "paused";
+      remoteChildPaused = msg.status === "paused";
+      if (msg.model) recordActiveAnsweringModel(msg.model);
+      const prog =
+        msg.completed !== undefined && msg.total
+          ? `[${msg.completed}/${msg.total}]`
+          : "";
+      createOrUpdateHud(msg.message || "Solving assessment...", prog, msg.status === "running");
+      return false;
+    }
+
+    // Handle relayed Live Gemini Inspector entries from a cross-origin child assessment iframe
+    if (msg.type === "AI_LOG_ENTRY" && msg.relayedFromChild && msg.entry && window === window.top) {
+      appendAiCommunicationLog(msg.entry, true);
+      return false;
+    }
+
     switch (msg.action) {
       case "START":
       case "START_ASSESSMENT_SOLVER":
         registerFrame(true);
         if (!isRunning) {
-          startAssessmentSolver(window === window.top);
+          startAssessmentSolver(false);
         }
         sendResponse({ ok: true });
         return false; // Synchronous response sent
       case "PAUSE":
+        remoteChildPaused = true;
         if (isRunning && !isPaused) {
           isPaused = true;
           sendStatus({ status: "paused", message: "Paused." });
+        } else if (window === window.top && document.getElementById("springbored-assignment-hud")) {
+          createOrUpdateHud("Paused.", "", false);
         }
         sendResponse({ ok: true });
         return false;
       case "RESUME":
+        remoteChildPaused = false;
         if (isRunning && isPaused) {
           isPaused = false;
           sendStatus({ status: "running", message: "Resumed." });
+        } else if (window === window.top && document.getElementById("springbored-assignment-hud")) {
+          createOrUpdateHud("Resumed.", "", true);
         }
         sendResponse({ ok: true });
         return false;
       case "STOP": {
         pendingStop = true;
-        const wasRunning = isRunning;
+        const wasRunning = isRunning || remoteChildRunning;
         isRunning = false;
         isPaused = false;
+        remoteChildRunning = false;
+        remoteChildPaused = false;
         if (wasRunning) {
           sendStatus({ status: "stopped", message: "Stopped." });
         }
@@ -4140,8 +4470,8 @@ Respond ONLY with valid JSON:
       case "GET_STATUS":
         registerFrame(true);
         sendResponse({
-          isRunning,
-          isPaused,
+          isRunning: isRunning || remoteChildRunning,
+          isPaused: isRunning ? isPaused : remoteChildPaused,
           hasAssessment: hasAssessmentDom(),
         });
         return false;

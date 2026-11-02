@@ -203,10 +203,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } else if (message.status === 'done' || message.status === 'error' || message.status === 'stopped') {
         solverLocks.delete(sender.tab.id);
       }
+
+      // If this status came from a child iframe, also relay it to the top frame (frameId 0)
+      // so the floating HUD in window.top updates its status, progress, and button state!
+      if ((sender.frameId ?? 0) !== 0 && chrome.tabs?.sendMessage) {
+        chrome.tabs
+          .sendMessage(sender.tab.id, { ...message, relayedFromChild: true }, { frameId: 0 })
+          .catch(() => {});
+      }
     }
 
     // Broadcast status to popup views
     chrome.runtime.sendMessage(message).catch(() => {});
+    return false;
+  }
+
+  if (message.type === 'AI_LOG_ENTRY') {
+    if (sender.tab?.id !== undefined && (sender.frameId ?? 0) !== 0 && chrome.tabs?.sendMessage) {
+      chrome.tabs
+        .sendMessage(sender.tab.id, { ...message, relayedFromChild: true }, { frameId: 0 })
+        .catch(() => {});
+    }
     return false;
   }
 
@@ -268,8 +285,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'DISPATCH_ACTION' || message.type === 'BROADCAST_START') {
     const action = message.action || 'START';
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tabId = tabs[0]?.id;
+    const resolveAndDispatch = async (tabId) => {
       if (!tabId) {
         sendResponse({ ok: false, error: 'No active tab' });
         return;
@@ -279,6 +295,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         solverLocks.delete(tabId);
       }
 
+      // Ensure content.js is injected into ALL frames (including cross-origin Techademy iframes)
+      if ((action === 'START' || action === 'START_ASSESSMENT_SOLVER') && chrome.scripting?.executeScript) {
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId, allFrames: true },
+            files: ['content.js']
+          });
+          await new Promise((r) => setTimeout(r, 180));
+        } catch (_) {}
+      }
+
+      // 1. Broadcast to all frames in the tab (omitting frameId sends to every frame in MV3)
+      if (chrome.tabs?.sendMessage) {
+        chrome.tabs.sendMessage(tabId, { action }).catch(() => {});
+      }
+
+      // 2. Also send explicitly to every registered frameId
       const targets = new Set([0]);
       const lock = solverLocks.get(tabId);
       if (lock) targets.add(lock.frameId);
@@ -294,8 +327,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           .catch(() => {});
       }
       sendResponse({ ok: true, frames: [...targets] });
-    });
-    return true; // sendResponse happens after the async tab query
+    };
+
+    if (sender.tab?.id !== undefined) {
+      resolveAndDispatch(sender.tab.id);
+    } else {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        resolveAndDispatch(tabs[0]?.id);
+      });
+    }
+    return true; // sendResponse happens asynchronously
   }
 
   if (message.type === 'TEST_GEMINI_KEY') {

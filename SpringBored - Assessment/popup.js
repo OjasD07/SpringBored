@@ -496,6 +496,18 @@ async function triggerSolverAction(action) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
 
+  // Always inject into all frames on START so dynamically-created or cross-origin
+  // assessment iframes (e.g. Techademy) are guaranteed to have content.js running.
+  if ((action === 'START' || action === 'START_ASSESSMENT_SOLVER') && chrome.scripting?.executeScript) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: true },
+        files: ['content.js']
+      });
+      await new Promise((r) => setTimeout(r, 180));
+    } catch (_) {}
+  }
+
   let delivered = false;
   try {
     const res = await chrome.tabs.sendMessage(tab.id, { action });
@@ -504,20 +516,18 @@ async function triggerSolverAction(action) {
     delivered = false;
   }
 
-  // If the tab was already open before the extension was loaded/reloaded,
-  // content.js will not be running yet. Inject it on the fly and retry.
   if (!delivered && chrome.scripting?.executeScript) {
     try {
       await chrome.scripting.executeScript({
         target: { tabId: tab.id, allFrames: true },
         files: ['content.js']
       });
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise((r) => setTimeout(r, 200));
       await chrome.tabs.sendMessage(tab.id, { action }).catch(() => {});
     } catch (_) {}
   }
 
-  // Also ask the service worker to dispatch to any registered child frames.
+  // Also ask the service worker to dispatch to all frames in the tab.
   chrome.runtime.sendMessage({ type: 'DISPATCH_ACTION', action }).catch(() => {});
 }
 
