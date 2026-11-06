@@ -6,7 +6,7 @@ const EDITION = 'assessment';
 const TELEMETRY_ENDPOINT = 'https://springbored.ojasdeshpande.in/api/telemetry';
 const VERSION_ENDPOINT = 'https://springbored.ojasdeshpande.in/api/version';
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/OjasD07/SpringBored/releases';
-const GITHUB_RELEASES_URL = 'https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0';
+const GITHUB_RELEASES_URL = 'https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.1.0';
 const UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 async function getOrCreateClientId() {
@@ -43,7 +43,7 @@ function compareSemver(a, b) {
 async function recordTelemetryEvent(event, metrics = {}) {
   try {
     const clientId = await getOrCreateClientId();
-    const version = chrome.runtime.getManifest().version || '1.0.0';
+    const version = chrome.runtime.getManifest().version || '1.1.0';
     const { personalStats = {} } = await chrome.storage.local.get(['personalStats']);
 
     const nextStats = {
@@ -75,7 +75,7 @@ async function recordTelemetryEvent(event, metrics = {}) {
 }
 
 async function checkForExtensionUpdate(force = false) {
-  const currentVersion = chrome.runtime.getManifest().version || '1.0.0';
+  const currentVersion = chrome.runtime.getManifest().version || '1.1.0';
   try {
     const { updateInfo } = await chrome.storage.local.get(['updateInfo']);
     if (

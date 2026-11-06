@@ -340,7 +340,7 @@ function renderUpdateBanner(info, dismissedVersion) {
     if (updateVersionBadge) updateVersionBadge.textContent = `v${info.latestVersion}`;
     if (updateBannerMsg) updateBannerMsg.textContent = `Update v${info.latestVersion} available`;
     if (updateDownloadLink) {
-      updateDownloadLink.href = info.releaseUrl || 'https://github.com/OjasD07/SpringBored/releases#release-course-v1.0.0';
+      updateDownloadLink.href = info.releaseUrl || 'https://github.com/OjasD07/SpringBored/releases#release-course-v1.1.0';
     }
   } else {
     updateBanner.hidden = true;
@@ -348,7 +348,7 @@ function renderUpdateBanner(info, dismissedVersion) {
 }
 
 if (currentVerLabel && chrome.runtime?.getManifest) {
-  currentVerLabel.textContent = `v${chrome.runtime.getManifest().version || '1.0.0'}`;
+  currentVerLabel.textContent = `v${chrome.runtime.getManifest().version || '1.1.0'}`;
 }
 
 chrome.storage.local.get(['personalStats', 'updateInfo', 'dismissedUpdateVersion'], (data) => {
@@ -384,11 +384,11 @@ if (btnCheckUpdate) {
         btnCheckUpdate.textContent = `v${info.latestVersion} available!`;
         addLog(`Update v${info.latestVersion} available on GitHub Releases`, 'done');
       } else {
-        const cur = chrome.runtime.getManifest?.()?.version || '1.0.0';
+        const cur = chrome.runtime.getManifest?.()?.version || '1.1.0';
         btnCheckUpdate.textContent = `Up to date (v${cur})`;
         addLog(`Extension is up to date (v${cur})`, 'done');
         setTimeout(() => {
-          btnCheckUpdate.textContent = 'Check updates';
+          btnCheckUpdate.textContent = 'Updates';
         }, 3000);
       }
     });

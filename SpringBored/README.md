@@ -2,14 +2,14 @@
   <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 16px 8px 0; vertical-align: middle;" /></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="./Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #244534; border-radius: 10px; padding: 4px; margin: 0 0 8px 0; vertical-align: middle;" /></a>
 </p>
 
-# ⚡ SpringBored — Course Edition (`v1.0.0`)
+# ⚡ SpringBored — Course Edition (`v1.1.0`)
 
 > **Autonomous 16× video accelerator, reading completer, and multi-module course runner for Infosys Springboard (`infyspringboard.onwingspan.com`) — zero API keys required.**
 
 <p align="left">
   <a href="https://github.com/OjasD07/SpringBored"><img src="https://img.shields.io/badge/%E2%98%85_Star_the_Repo-GitHub-e5a952?style=for-the-badge&logo=github&logoColor=162b21&labelColor=244534" alt="Star the Repo" /></a>
   <a href="https://sponsor.ojasdeshpande.in/"><img src="https://img.shields.io/badge/%E2%99%A5_Support_My_OSS-Sponsor-e6926d?style=for-the-badge&logo=razorpay&logoColor=162b21&labelColor=244534" alt="Support My OSS" /></a>
-  <a href="https://github.com/OjasD07/SpringBored/releases#release-course-v1.0.0"><img src="https://img.shields.io/badge/Release-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Release v1.0.0" /></a>
+  <a href="https://github.com/OjasD07/SpringBored/releases#release-course-v1.1.0"><img src="https://img.shields.io/badge/Release-v1.1.0-96c99e?style=for-the-badge&labelColor=244534" alt="Release v1.1.0" /></a>
   <a href="https://springbored.ojasdeshpande.in/"><img src="https://img.shields.io/badge/Website-springbored.ojasdeshpande.in-f3ebd3?style=for-the-badge&labelColor=244534" alt="Official Website" /></a>
 </p>
 
@@ -32,7 +32,7 @@
 
 ## 🚀 Installation
 
-1. Download **`SpringBored-Course-v1.0.0.zip`** from [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases#release-course-v1.0.0) and extract it to a permanent folder, **or** clone the repository:
+1. Download **`SpringBored-Course-v1.1.0.zip`** from [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases#release-course-v1.1.0) and extract it to a permanent folder, **or** clone the repository:
    ```bash
    git clone https://github.com/OjasD07/SpringBored.git
    ```
@@ -113,7 +113,7 @@
 
 ### Local Storage Keys (`chrome.storage.local`)
 
-- `sbConsent`: `{ accepted: boolean, version: "1.0.0", acceptedAt: number }` — gates all automation until the current terms version is accepted.
+- `sbConsent`: `{ accepted: boolean, version: "1.1.0", acceptedAt: number }` — gates all automation until the current terms version is accepted.
 - `sbLocalStats`: `{ lecturesCompleted, modulesCompleted, coursesCompleted, activeSeconds, savedSeconds }` — powers the popup impact stats strip.
 - `sbInstallId`: Randomly generated anonymous UUID used strictly for aggregate telemetry deduplication.
 - `sbUpdateInfo`: Cached latest release metadata from GitHub Releases (`latestVersion`, `hasUpdate`, `releaseUrl`).
@@ -124,7 +124,7 @@
 
 ```text
 SpringBored/
-├── manifest.json       # Manifest V3 extension configuration (v1.0.0)
+├── manifest.json       # Manifest V3 extension configuration (v1.1.0)
 ├── background.js       # Service worker: consent badge, telemetry & GitHub update checker
 ├── content.js          # Core automation engine (TOC, 16x video playback, auto-confirm)
 ├── popup.html          # Extension popup UI (Consent Gate + Course Runner Dashboard)

@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [`v1.1.0`] — 2026-11-06
+
+### ✨ Changed & Improved — Both Editions (`v1.1.0`)
+- **Refreshed Botanical Forest Popup UI**:
+  - Added a unified `.hero-card` container combining live status and progress tracking.
+  - Added a collapsible **AI engine** summary bar (`Configure` / `Done` toggle) in Assessment Edition that auto-collapses the API key card once a key is verified.
+  - Redesigned the 3-column **Personal Impact** ledger (`Time saved`, `Lectures` / `Solved`, `Courses` / `Assessments`) with custom vector icons.
+  - Upgraded the first-run **Before you begin** consent card with a botanical leaf watermark and quick-reopen footer note.
+  - Streamlined the popup footer action row (`v1.1.0 · Updates · Privacy · ★ Star · ♥ Sponsor`).
+- **Upgraded Fullscreen Assessment HUD (`SpringBored - Assessment`)**:
+  - Replaced text glyphs in the HUD header toolbar with crisp inline SVG icons (`Switch corner`, `Expand inspector`, `Minimize`, `Close`).
+  - Added a top gradient accent bar and unified HUD footer (`SpringBored · Ojas Deshpande · ★ Star · ♥ Sponsor`) that collapses cleanly when minimized.
+
+---
+
 ## [`v1.0.0`] — 2026-11-02 (Initial Public Open-Source Release)
 
 ### ✨ Added — `SpringBored` (Course Edition `v1.0.0`)
