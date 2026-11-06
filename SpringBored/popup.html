@@ -22,7 +22,7 @@
               <h1 class="title">SpringBored</h1>
               <span class="edition">Course</span>
             </div>
-            <p class="subtitle">Infosys Springboard Automation</p>
+            <p class="subtitle">Infosys Springboard automation</p>
           </div>
         </div>
         <div class="status-chip" title="Current state">
@@ -40,7 +40,7 @@
           <a
             class="update-download-link"
             id="updateDownloadLink"
-            href="https://github.com/OjasD07/SpringBored/releases#release-course-v1.0.0"
+            href="https://github.com/OjasD07/SpringBored/releases#release-course-v1.1.0"
             target="_blank"
             rel="noopener noreferrer"
             >Update &nearr;</a
@@ -59,73 +59,94 @@
       <!-- First-run notice -->
       <main class="consent-view" id="noticeModal" hidden>
         <div class="notice-card">
-          <div class="notice-topline">
-            <span class="eyebrow">Before You Begin</span>
-            <button
-              class="notice-close"
-              id="btnCloseNotice"
-              title="Close notice"
-              type="button"
-              hidden
-            >
-              Close &times;
-            </button>
-          </div>
-
-          <h2 class="notice-title">Local course automation</h2>
-          <p class="notice-lede">
-            SpringBored automates video playback and reading checkpoints inside
-            your browser, while leaving graded quizzes and assessments untouched.
-          </p>
-
-          <ol class="notice-list">
-            <li class="notice-item">
-              <span class="notice-num">01</span>
-              <div class="notice-text">
-                <strong>100% local execution</strong>
-                <p>
-                  No account credentials, tokens, or browsing data ever leave
-                  your device.
-                </p>
-              </div>
-            </li>
-            <li class="notice-item">
-              <span class="notice-num">02</span>
-              <div class="notice-text">
-                <strong>Assessments are skipped automatically</strong>
-                <p>
-                  Quizzes, tests, and graded assignments are detected and
-                  bypassed so you can review them yourself.
-                </p>
-              </div>
-            </li>
-            <li class="notice-item">
-              <span class="notice-num">03</span>
-              <div class="notice-text">
-                <strong>Your responsibility</strong>
-                <p>
-                  Use this tool in accordance with your organization or
-                  institution's policies.
-                </p>
-              </div>
-            </li>
-          </ol>
-
-          <button class="btn btn-accept" id="btnAcceptNotice" type="button">
-            <span id="btnAcceptText">I understand — open dashboard</span>
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
+          <svg class="notice-leaf" viewBox="0 0 120 120" aria-hidden="true">
+            <path
+              d="M96 10C65 18 42 38 31 69c19 10 43 3 55-15 11-17 12-31 10-44Z"
+              fill="currentColor"
+            />
+            <path
+              d="M30 92c14-27 35-47 61-60"
               fill="none"
               stroke="currentColor"
               stroke-width="2.2"
-              aria-hidden="true"
-            >
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-              <polyline points="12 5 19 12 12 19"></polyline>
-            </svg>
-          </button>
+              stroke-linecap="round"
+            />
+          </svg>
+
+          <div class="notice-inner">
+            <div class="notice-topline">
+              <span class="eyebrow">Before you begin</span>
+              <button
+                class="notice-close"
+                id="btnCloseNotice"
+                title="Close notice"
+                type="button"
+                hidden
+              >
+                Close &times;
+              </button>
+            </div>
+
+            <h2 class="notice-title" id="noticeTitle">Local course automation</h2>
+            <p class="notice-lede">
+              SpringBored automates video playback and reading checkpoints
+              inside your browser, while leaving graded quizzes and assessments
+              untouched.
+            </p>
+
+            <ol class="notice-list">
+              <li class="notice-item">
+                <span class="notice-num">01</span>
+                <div class="notice-text">
+                  <strong>100% local execution</strong>
+                  <p>
+                    No account credentials, tokens, or browsing data ever leave
+                    your device.
+                  </p>
+                </div>
+              </li>
+              <li class="notice-item">
+                <span class="notice-num">02</span>
+                <div class="notice-text">
+                  <strong>Assessments are skipped automatically</strong>
+                  <p>
+                    Quizzes, tests, and graded assignments are detected and
+                    bypassed so you can review them yourself.
+                  </p>
+                </div>
+              </li>
+              <li class="notice-item">
+                <span class="notice-num">03</span>
+                <div class="notice-text">
+                  <strong>Your responsibility</strong>
+                  <p>
+                    Use this tool in accordance with your organization or
+                    institution's policies.
+                  </p>
+                </div>
+              </li>
+            </ol>
+
+            <button class="btn btn-accept" id="btnAcceptNotice" type="button">
+              <span id="btnAcceptText">I understand — open the dashboard</span>
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                aria-hidden="true"
+              >
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </button>
+
+            <p class="notice-footnote">
+              You can reopen this notice anytime from Privacy in the footer.
+            </p>
+          </div>
         </div>
       </main>
 
@@ -151,45 +172,47 @@
           </span>
         </div>
 
-        <section class="status-card panel" id="statusCard">
-          <div class="status-icon" id="statusIcon">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </div>
-          <div class="status-content">
-            <span class="status-label">Current Status</span>
-            <p class="status-text" id="statusText" aria-live="polite">
-              Ready to start
-            </p>
-          </div>
-        </section>
+        <section class="hero-card" aria-label="Course status">
+          <section class="status-card panel" id="statusCard">
+            <div class="status-icon" id="statusIcon">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+            </div>
+            <div class="status-content">
+              <span class="status-label">Current status</span>
+              <p class="status-text" id="statusText" aria-live="polite">
+                Ready to start
+              </p>
+            </div>
+          </section>
 
-        <section class="progress-section panel" id="progressSection" hidden>
-          <div class="progress-labels">
-            <span class="prog-label">Course Progress</span>
-            <span class="prog-count" id="progCount">0 / 0</span>
-          </div>
-          <div class="progress-bar-track">
-            <div class="progress-bar-fill" id="progressFill"></div>
-          </div>
-          <div class="progress-meta">
-            <span class="meta-badge done" id="doneBadge">
-              <span class="meta-value" id="doneCount">0</span> completed
-            </span>
-            <span class="meta-badge skip" id="skipBadge">
-              <span class="meta-value" id="skipCount">0</span> skipped
-            </span>
-          </div>
+          <section class="progress-section" id="progressSection" hidden>
+            <div class="progress-labels">
+              <span class="prog-label">Course progress</span>
+              <span class="prog-count" id="progCount">0 / 0</span>
+            </div>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-meta">
+              <span class="meta-badge done" id="doneBadge">
+                <span class="meta-value" id="doneCount">0</span> completed
+              </span>
+              <span class="meta-badge skip" id="skipBadge">
+                <span class="meta-value" id="skipCount">0</span> skipped
+              </span>
+            </div>
+          </section>
         </section>
 
         <section class="controls" aria-label="Course controls">
@@ -233,12 +256,26 @@
         </section>
 
         <aside class="refresh-tip">
-          <div class="tip-head">
-            <span class="tip-label">Quick Tip</span>
-          </div>
+          <svg
+            class="tip-icon"
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            aria-hidden="true"
+          >
+            <path d="M9 18h6"></path>
+            <path d="M10 22h4"></path>
+            <path
+              d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.4 1 2.3h6c0-.9.4-1.8 1-2.3A7 7 0 0 0 12 2Z"
+            ></path>
+          </svg>
           <p class="tip-text">
-            Refresh the course tab once before pressing
-            <strong>Run course</strong> so the lesson tree loads cleanly.
+            <strong>Quick tip</strong> Refresh the course tab once before
+            pressing <strong>Run course</strong> so the lesson tree loads
+            cleanly.
           </p>
         </aside>
 
@@ -246,43 +283,84 @@
           <div class="log-header">
             <div class="log-title-wrap">
               <span class="log-dot"></span>
-              <span>Activity Console</span>
+              <span>Activity console</span>
             </div>
             <button class="clear-btn" id="clearLog" type="button">Clear</button>
           </div>
           <div class="log-feed" id="logFeed" aria-live="polite">
-            <div class="log-entry idle">Ready. Open a course player tab.</div>
+            <div class="log-entry idle">
+              Ready. Open a course player tab.
+            </div>
           </div>
         </section>
 
-        <div class="personal-stats-bar" id="personalStatsBar">
-          <span>Saved <strong id="statTimeSaved">0m</strong></span>
-          <span class="stats-sep">&middot;</span>
-          <span><strong id="statLectures">0</strong> lectures</span>
-          <span class="stats-sep">&middot;</span>
-          <span><strong id="statCourses">0</strong> courses</span>
-        </div>
-
-        <div class="oss-support-bar">
-          <a
-            class="oss-pill oss-pill-star"
-            href="https://github.com/OjasD07/SpringBored"
-            target="_blank"
-            rel="noopener noreferrer"
-            >&#9733; Star the Repo</a
-          >
-          <a
-            class="oss-pill oss-pill-sponsor"
-            href="https://sponsor.ojasdeshpande.in/"
-            target="_blank"
-            rel="noopener noreferrer"
-            >&#9829; Support my OSS</a
-          >
+        <div
+          class="personal-stats-bar"
+          id="personalStatsBar"
+          aria-label="Personal impact"
+        >
+          <div class="stat">
+            <svg
+              class="stat-icon"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M12 7v5l3 2"></path>
+            </svg>
+            <div class="stat-copy">
+              <span class="stat-value" id="statTimeSaved">0m</span>
+              <span class="stat-label">Time saved</span>
+            </div>
+          </div>
+          <div class="stat">
+            <svg
+              class="stat-icon"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2V5Z"></path>
+              <path d="M8 3v18"></path>
+            </svg>
+            <div class="stat-copy">
+              <span class="stat-value" id="statLectures">0</span>
+              <span class="stat-label">Lectures</span>
+            </div>
+          </div>
+          <div class="stat">
+            <svg
+              class="stat-icon"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <path d="m2 9 10-5 10 5-10 5L2 9Z"></path>
+              <path d="M6 11v4c0 1.7 2.7 3 6 3s6-1.3 6-3v-4"></path>
+            </svg>
+            <div class="stat-copy">
+              <span class="stat-value" id="statCourses">0</span>
+              <span class="stat-label">Courses</span>
+            </div>
+          </div>
         </div>
       </main>
 
       <footer class="site-footer">
-        <p class="footer-copy">
+        <p class="footer-brand-row">
           <a
             class="footer-brand"
             href="https://springbored.ojasdeshpande.in/"
@@ -300,23 +378,31 @@
           >
         </p>
         <div class="footer-links-row">
-          <span class="footer-ver" id="currentVersionLabel">v1.0.0</span>
+          <span class="footer-ver" id="currentVersionLabel">v1.1.0</span>
           <span class="stats-sep">&middot;</span>
-          <button
-            class="link-btn footer-privacy"
-            id="btnCheckUpdate"
-            type="button"
-          >
-            Check updates
+          <button class="link-btn" id="btnCheckUpdate" type="button">
+            Updates
           </button>
           <span class="stats-sep">&middot;</span>
-          <button
-            class="link-btn footer-privacy"
-            id="btnOpenNotice"
-            type="button"
-          >
-            Privacy &amp; terms
+          <button class="link-btn" id="btnOpenNotice" type="button">
+            Privacy
           </button>
+          <span class="stats-sep">&middot;</span>
+          <a
+            class="footer-support"
+            href="https://github.com/OjasD07/SpringBored"
+            target="_blank"
+            rel="noopener noreferrer"
+            >&#9733; Star</a
+          >
+          <span class="stats-sep">&middot;</span>
+          <a
+            class="footer-support sponsor"
+            href="https://sponsor.ojasdeshpande.in/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >&#9829; Sponsor</a
+          >
         </div>
       </footer>
     </div>

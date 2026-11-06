@@ -18,7 +18,7 @@ assignees: OjasD07
 
 ## Environment
 
-- **SpringBored Version**: `v1.0.0`
+- **SpringBored Version**: `v1.1.0`
 - **Browser & Version**: (e.g., Chrome 142 / Brave / Edge)
 - **Operating System**: (e.g., macOS / Windows 11 / Linux)
 - **Assessment / Course Type**: (e.g., Standard Springboard Quiz, Multi-Section IAP Assessment, Embedded Techademy Assessment, Video Lecture, Reading Module)

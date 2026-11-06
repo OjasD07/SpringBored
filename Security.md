@@ -2,7 +2,7 @@
   <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 16px 8px 0; vertical-align: middle;" /></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="./SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #244534; border-radius: 10px; padding: 4px; margin: 0 0 8px 0; vertical-align: middle;" /></a>
 </p>
 
-# 🔒 Security Policy & Architecture (`v1.0.0`)
+# 🔒 Security Policy & Architecture (`v1.1.0`)
 
 > **Security model, API key protection, prompt-injection defenses, runtime isolation, and vulnerability disclosure policy for `SpringBored` and `SpringBored - Assessment`.**
 
@@ -19,8 +19,8 @@ Only the latest release on [**GitHub Releases**](https://github.com/OjasD07/Spri
 
 | Version | Supported | Notes |
 | :--- | :---: | :--- |
-| `v1.0.x` | ✅ Yes | Current stable Manifest V3 release |
-| `< v1.0.0` | ❌ No | Pre-release prototypes (please upgrade via GitHub Releases) |
+| `v1.1.x` | ✅ Yes | Current stable Manifest V3 release |
+| `< v1.1.0` | ❌ No | Older releases (please upgrade via GitHub Releases) |
 
 ---
 

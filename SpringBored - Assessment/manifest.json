@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SpringBored (Assessment Edition)",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Autonomous Infosys Springboard quiz and multi-section assessment solver powered by Google Gemini AI.",
   "permissions": [
     "activeTab",

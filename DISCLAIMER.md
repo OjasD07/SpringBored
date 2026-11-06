@@ -2,7 +2,7 @@
   <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 16px 8px 0; vertical-align: middle;" /></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="./SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #244534; border-radius: 10px; padding: 4px; margin: 0 0 8px 0; vertical-align: middle;" /></a>
 </p>
 
-# ⚖️ Academic Honor Code & Legal Disclaimer (`v1.0.0`)
+# ⚖️ Academic Honor Code & Legal Disclaimer (`v1.1.0`)
 
 > **Important terms regarding academic integrity, institutional honor codes, platform Terms of Service, AI accuracy, and limitation of liability for `SpringBored` and `SpringBored - Assessment`.**
 

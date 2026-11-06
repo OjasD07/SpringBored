@@ -2,14 +2,14 @@
   <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 16px 8px 0; vertical-align: middle;" /></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="./SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #244534; border-radius: 10px; padding: 4px; margin: 0 0 8px 0; vertical-align: middle;" /></a>
 </p>
 
-# 📖 How to Use SpringBored (`v1.0.0`)
+# 📖 How to Use SpringBored (`v1.1.0`)
 
 > **Complete step-by-step installation, setup, operation, and troubleshooting guide for both `SpringBored` (Course Edition) and `SpringBored - Assessment` (Assessment Edition).**
 
 <p align="left">
   <a href="https://github.com/OjasD07/SpringBored"><img src="https://img.shields.io/badge/%E2%98%85_Star_the_Repo-GitHub-e5a952?style=for-the-badge&logo=github&logoColor=162b21&labelColor=244534" alt="Star the Repo" /></a>
   <a href="https://sponsor.ojasdeshpande.in/"><img src="https://img.shields.io/badge/%E2%99%A5_Support_My_OSS-Sponsor-e6926d?style=for-the-badge&logo=razorpay&logoColor=162b21&labelColor=244534" alt="Support My OSS" /></a>
-  <a href="https://github.com/OjasD07/SpringBored/releases"><img src="https://img.shields.io/badge/Download-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Download v1.0.0" /></a>
+  <a href="https://github.com/OjasD07/SpringBored/releases"><img src="https://img.shields.io/badge/Download-v1.1.0-96c99e?style=for-the-badge&labelColor=244534" alt="Download v1.1.0" /></a>
 </p>
 
 ---
@@ -38,10 +38,10 @@ SpringBored is packaged as two independent extensions so you can install either 
 
 ## 2. Step 1 — Download & Extract
 
-1. Visit the official [**GitHub Releases page (`v1.0.0`)**](https://github.com/OjasD07/SpringBored/releases).
+1. Visit the official [**GitHub Releases page (`v1.1.0`)**](https://github.com/OjasD07/SpringBored/releases).
 2. Download the `.zip` archive that matches your needs:
-   - [**`SpringBored-Course-v1.0.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-course-v1.0.0) — Course Edition (16× Video & Reading Completer)
-   - [**`SpringBored-Assessment-v1.0.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0) — Assessment Edition (Gemini AI Quiz & Assessment Solver)
+   - [**`SpringBored-Course-v1.1.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-course-v1.1.0) — Course Edition (16× Video & Reading Completer)
+   - [**`SpringBored-Assessment-v1.1.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.1.0) — Assessment Edition (Gemini AI Quiz & Assessment Solver)
    *(Alternatively, clone the repository with `git clone https://github.com/OjasD07/SpringBored.git`.)*
 3. **Extract the `.zip` file** to a permanent folder on your computer (for example, `Documents/Extensions/SpringBored`).
    > ⚠️ **Important**: Chrome loads unpacked extensions directly from this folder. Do **not** delete or move the extracted folder while the extension is installed.
@@ -149,7 +149,7 @@ Both extensions include an automatic GitHub Releases update checker:
 | **Course runner pauses or videos don't finish** | Ensure the Springboard tab is **not minimized** or hidden behind another window on the same display; Chrome throttles background media timers. |
 | **`HTTP 429` or quota message during an assessment** | You don't need to stop! SpringBored automatically falls back to the next available Gemini model (`2.5 Flash` → `3 Flash` → `2.5 Pro` → `2.5 Flash Lite` → `2.0 Flash`) and retries with backoff. |
 | **Floating HUD is covering a button on screen** | Drag the HUD by its top header bar (`SpringBored Assessment`) to any corner of your screen, or click the **`—`** button to collapse it into a compact pill. |
-| **Assessment inside `/viewer/html/` is hosted on Techademy** | Make sure you are running `v1.0.0+` of `SpringBored - Assessment` and click **Reload (`↻`)** on `chrome://extensions/` so cross-origin iframe permissions are active. |
+| **Assessment inside `/viewer/html/` is hosted on Techademy** | Make sure you are running `v1.1.0+` of `SpringBored - Assessment` and click **Reload (`↻`)** on `chrome://extensions/` so cross-origin iframe permissions are active. |
 
 ---
 

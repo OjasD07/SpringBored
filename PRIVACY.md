@@ -2,7 +2,7 @@
   <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 16px 8px 0; vertical-align: middle;" /></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="./SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #244534; border-radius: 10px; padding: 4px; margin: 0 0 8px 0; vertical-align: middle;" /></a>
 </p>
 
-# 🛡️ Privacy Policy & Telemetry Transparency (`v1.0.0`)
+# 🛡️ Privacy Policy & Telemetry Transparency (`v1.1.0`)
 
 > **Complete disclosure of local browser storage, third-party API calls, and anonymous aggregate impact telemetry for `SpringBored`, `SpringBored - Assessment`, and `springbored.ojasdeshpande.in`.**
 
@@ -33,7 +33,7 @@ All user configuration and personal impact counters are stored locally on your o
 
 | Storage Key | Edition | Stored Value & Purpose |
 | :--- | :--- | :--- |
-| `sbConsent` | Both | `{ accepted: boolean, version: "1.0.0", acceptedAt: number }` — records whether you have accepted the Privacy & Terms notice. Automation stays disabled until `accepted === true`. |
+| `sbConsent` | Both | `{ accepted: boolean, version: "1.1.0", acceptedAt: number }` — records whether you have accepted the Privacy & Terms notice. Automation stays disabled until `accepted === true`. |
 | `geminiApiKey` | Assessment | Your Google Gemini API key string (`AIzaSy...`), used exclusively to authenticate direct requests to `generativelanguage.googleapis.com`. |
 | `geminiModel` | Assessment | Your selected Gemini model ID (defaults to `"gemini-2.5-flash"`). |
 | `sbLocalStats` | Both | Your local cumulative counters (`lecturesCompleted`, `modulesCompleted`, `coursesCompleted` or `questionsSolved`, `assessmentsCompleted`, plus `activeSeconds` and `savedSeconds`) displayed in the popup's personal impact strip. |
@@ -64,7 +64,7 @@ To power the live public impact counters and 52-week usage heatmap on [**springb
   ```json
   {
     "edition": "course | assessment",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "installId": "<random-anonymous-uuid>",
     "event": "lecture_completed | question_solved | assessment_completed | ...",
     "deltas": {

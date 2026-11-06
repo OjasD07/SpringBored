@@ -24,6 +24,9 @@ const btnOpenNotice     = document.getElementById('btnOpenNotice');
 const statusState       = document.getElementById('statusState');
 const copyrightYear     = document.getElementById('copyrightYear');
 const engineState       = document.getElementById('engineState');
+const aiConfigCard      = document.getElementById('aiConfigCard');
+const btnToggleEngine   = document.getElementById('btnToggleEngine');
+const engineModelLabel  = document.getElementById('engineModelLabel');
 
 // AI Settings Elements
 const aiQuizToggle      = document.getElementById('aiQuizToggle');
@@ -118,6 +121,23 @@ function formatModelName(modelCode) {
     .join(' ');
 }
 
+function setModelLabel(formatted) {
+  if (engineModelLabel) engineModelLabel.textContent = formatted;
+}
+
+function setEngineOpen(open) {
+  if (!aiCardBody || !btnToggleEngine) return;
+  aiCardBody.hidden = !open;
+  btnToggleEngine.setAttribute('aria-expanded', String(open));
+  btnToggleEngine.textContent = open ? 'Done' : 'Configure';
+}
+
+if (btnToggleEngine) {
+  btnToggleEngine.addEventListener('click', () => {
+    setEngineOpen(Boolean(aiCardBody?.hidden));
+  });
+}
+
 // ── Initialize AI Quiz Settings ──────────────────────────────────────────────
 const modelSelect         = document.getElementById('modelSelect');
 const quizBadgeModelText  = document.getElementById('quizBadgeModelText');
@@ -155,6 +175,7 @@ chrome.storage.local.get(['aiQuizEnabled', 'geminiApiKey', 'geminiModel'], (data
   if (quizBadgeModelText) {
     quizBadgeModelText.textContent = formatModelName(modelName);
   }
+  setModelLabel(formatModelName(modelName));
 
   if (data.geminiApiKey) {
     const cleanStoredKey = sanitizeApiKey(data.geminiApiKey);
@@ -166,11 +187,13 @@ chrome.storage.local.get(['aiQuizEnabled', 'geminiApiKey', 'geminiModel'], (data
       keyStatusText.textContent = `✓ Active (${formatModelName(modelName)})`;
       keyStatusText.className = 'key-status success';
     }
+    setEngineOpen(false);
   } else {
     if (keyStatusText) {
-      keyStatusText.textContent = 'No key saved. Paste your key above.';
+      keyStatusText.textContent = 'No key saved. Paste your key below.';
       keyStatusText.className = 'key-status error';
     }
+    setEngineOpen(true);
   }
 });
 
@@ -185,13 +208,14 @@ if (modelSelect) {
       if (quizBadgeModelText) {
         quizBadgeModelText.textContent = formatted;
       }
+      setModelLabel(formatted);
       addLog(`Model set to ${formatted}`, 'done');
     });
   });
 }
 
 function updateAiCardState(enabled) {
-  if (aiCardBody) aiCardBody.classList.toggle('is-off', !enabled);
+  if (aiConfigCard) aiConfigCard.classList.toggle('is-off', !enabled);
   if (engineState) {
     engineState.textContent = enabled ? 'On' : 'Off';
     engineState.classList.toggle('is-off', !enabled);
@@ -393,6 +417,8 @@ if (btnSaveKey && geminiApiKeyInput) {
           if (quizBadgeModelText) quizBadgeModelText.textContent = formatted;
           keyStatusText.textContent = `✓ Active (${formatted})`;
           keyStatusText.className = 'key-status success';
+          setModelLabel(formatted);
+          setEngineOpen(false);
           addLog(`✓ Gemini connected successfully (${formatted})`, 'done');
         });
       } else {
@@ -609,6 +635,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       ensureModelOption(msg.model);
       if (modelSelect) modelSelect.value = msg.model;
       if (quizBadgeModelText) quizBadgeModelText.textContent = formattedModel;
+      setModelLabel(formattedModel);
       if (keyStatusText && geminiApiKeyInput?.value) {
         keyStatusText.textContent = `✓ Active (${formattedModel})`;
         keyStatusText.className = 'key-status success';
@@ -708,7 +735,7 @@ function renderUpdateBanner(info, dismissedVersion) {
     if (updateVersionBadge) updateVersionBadge.textContent = `v${info.latestVersion}`;
     if (updateBannerMsg) updateBannerMsg.textContent = `Update v${info.latestVersion} available`;
     if (updateDownloadLink) {
-      updateDownloadLink.href = info.releaseUrl || 'https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0';
+      updateDownloadLink.href = info.releaseUrl || 'https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.1.0';
     }
   } else {
     updateBanner.hidden = true;
@@ -716,7 +743,7 @@ function renderUpdateBanner(info, dismissedVersion) {
 }
 
 if (currentVerLabel && chrome.runtime?.getManifest) {
-  currentVerLabel.textContent = `v${chrome.runtime.getManifest().version || '1.0.0'}`;
+  currentVerLabel.textContent = `v${chrome.runtime.getManifest().version || '1.1.0'}`;
 }
 
 chrome.storage.local.get(['personalStats', 'updateInfo', 'dismissedUpdateVersion'], (data) => {
@@ -752,11 +779,11 @@ if (btnCheckUpdate) {
         btnCheckUpdate.textContent = `v${info.latestVersion} available!`;
         addLog(`Update v${info.latestVersion} available on GitHub Releases`, 'done');
       } else {
-        const cur = chrome.runtime.getManifest?.()?.version || '1.0.0';
+        const cur = chrome.runtime.getManifest?.()?.version || '1.1.0';
         btnCheckUpdate.textContent = `Up to date (v${cur})`;
         addLog(`Extension is up to date (v${cur})`, 'done');
         setTimeout(() => {
-          btnCheckUpdate.textContent = 'Check updates';
+          btnCheckUpdate.textContent = 'Updates';
         }, 3000);
       }
     });

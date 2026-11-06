@@ -2,14 +2,14 @@
   <a href="https://www.ojasdeshpande.in" target="_blank"><img src="https://raw.githubusercontent.com/OjasD07/OjasD07/main/Logo.svg" alt="Ojas Deshpande Logo" width="88" height="88" style="width: 88px; height: 88px; background: #ffffff; border-radius: 10px; padding: 8px; margin: 0 16px 8px 0; vertical-align: middle;" /></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://springbored.ojasdeshpande.in" target="_blank"><img src="./SpringBored/Assets/Logo.png" alt="SpringBored Logo" width="88" height="88" style="width: 88px; height: 88px; background: #244534; border-radius: 10px; padding: 4px; margin: 0 0 8px 0; vertical-align: middle;" /></a>
 </p>
 
-# ⚡ SpringBored (`v1.0.0`)
+# ⚡ SpringBored (`v1.1.0`)
 
 > **Intelligent, autonomous course & assessment automation suite for Infosys Springboard (`infyspringboard.onwingspan.com`) — built as two zero-dependency Manifest V3 Chrome extensions.**
 
 <p align="left">
   <a href="https://github.com/OjasD07/SpringBored"><img src="https://img.shields.io/badge/%E2%98%85_Star_the_Repo-GitHub-e5a952?style=for-the-badge&logo=github&logoColor=162b21&labelColor=244534" alt="Star the Repo on GitHub" /></a>
   <a href="https://sponsor.ojasdeshpande.in/"><img src="https://img.shields.io/badge/%E2%99%A5_Support_My_OSS-Sponsor-e6926d?style=for-the-badge&logo=razorpay&logoColor=162b21&labelColor=244534" alt="Support My OSS" /></a>
-  <a href="https://github.com/OjasD07/SpringBored/releases"><img src="https://img.shields.io/badge/Release-v1.0.0-96c99e?style=for-the-badge&labelColor=244534" alt="Release v1.0.0" /></a>
+  <a href="https://github.com/OjasD07/SpringBored/releases"><img src="https://img.shields.io/badge/Release-v1.1.0-96c99e?style=for-the-badge&labelColor=244534" alt="Release v1.1.0" /></a>
   <a href="https://springbored.ojasdeshpande.in/"><img src="https://img.shields.io/badge/Website-springbored.ojasdeshpande.in-f3ebd3?style=for-the-badge&labelColor=244534" alt="Official Website" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-84987c?style=for-the-badge&labelColor=244534" alt="Apache 2.0 License" /></a>
 </p>
@@ -56,9 +56,9 @@ To keep course completion separate from graded evaluations, SpringBored is split
 
 All official builds are distributed via [**GitHub Releases**](https://github.com/OjasD07/SpringBored/releases). Because Chrome cannot load a `.zip` file directly in Developer Mode, extract the archive first:
 
-1. Download the release archive from [**GitHub Releases (`v1.0.0`)**](https://github.com/OjasD07/SpringBored/releases):
-   - [**`SpringBored-Course-v1.0.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-course-v1.0.0) *(Course Edition — 16× Video & Reading Completer)*
-   - [**`SpringBored-Assessment-v1.0.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0) *(Assessment Edition — Gemini AI Quiz & Assessment Solver)*
+1. Download the release archive from [**GitHub Releases (`v1.1.0`)**](https://github.com/OjasD07/SpringBored/releases):
+   - [**`SpringBored-Course-v1.1.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-course-v1.1.0) *(Course Edition — 16× Video & Reading Completer)*
+   - [**`SpringBored-Assessment-v1.1.0.zip`**](https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.1.0) *(Assessment Edition — Gemini AI Quiz & Assessment Solver)*
    - Or clone the repository:
      ```bash
      git clone https://github.com/OjasD07/SpringBored.git
@@ -105,7 +105,7 @@ SpringBored/
 │   ├── Assets/
 │   │   └── Logo.png                 # Botanical forest brand emblem (512x512)
 │   ├── icons/                       # Extension toolbar icons (16px, 48px, 128px)
-│   ├── manifest.json                # Manifest V3 configuration (v1.0.0)
+│   ├── manifest.json                # Manifest V3 configuration (v1.1.0)
 │   ├── background.js                # Service worker, consent badge, telemetry & update checker
 │   ├── content.js                   # TOC expander, 16x video seeker, reading & modal handler
 │   ├── popup.html                   # Popup UI (consent gate, controls, stats, update banner)
@@ -123,7 +123,7 @@ SpringBored/
 │   ├── popup.css                    # Botanical forest design system stylesheet
 │   ├── popup.js                     # Popup controller, key validator & allFrames script injector
 │   └── README.md                    # Assessment Edition documentation
-├── CHANGELOG.md                     # Version release history (v1.0.0)
+├── CHANGELOG.md                     # Version release history (v1.1.0)
 ├── CODE_OF_CONDUCT.md               # Community Code of Conduct
 ├── CONTRIBUTING.md                  # Developer setup, architecture & PR guidelines
 ├── DISCLAIMER.md                    # Academic honor code, ToS & liability disclaimer
@@ -147,7 +147,7 @@ SpringBored/
 | [**PRIVACY.md**](./PRIVACY.md) | Local storage breakdown, zero-PII guarantee, and anonymous telemetry specification |
 | [**DISCLAIMER.md**](./DISCLAIMER.md) | Academic integrity policy, institutional honor code responsibility, and non-affiliation notice |
 | [**CONTRIBUTING.md**](./CONTRIBUTING.md) | Local development workflow, design tokens, testing checklist, and pull request standards |
-| [**CHANGELOG.md**](./CHANGELOG.md) | Detailed release notes for `v1.0.0` |
+| [**CHANGELOG.md**](./CHANGELOG.md) | Detailed release notes for `v1.1.0` |
 | [**CODE_OF_CONDUCT.md**](./CODE_OF_CONDUCT.md) | Open-source community standards and expectations |
 
 ---

@@ -22,7 +22,7 @@
               <h1 class="title">SpringBored</h1>
               <span class="edition edition-ai">Assessment</span>
             </div>
-            <p class="subtitle">Gemini AI Assessment Solver</p>
+            <p class="subtitle">Gemini AI assessment solver</p>
           </div>
         </div>
         <div class="status-chip" title="Current state">
@@ -40,7 +40,7 @@
           <a
             class="update-download-link"
             id="updateDownloadLink"
-            href="https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0"
+            href="https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.1.0"
             target="_blank"
             rel="noopener noreferrer"
             >Update &nearr;</a
@@ -59,74 +59,96 @@
       <!-- First-run notice -->
       <main class="consent-view" id="noticeModal" hidden>
         <div class="notice-card">
-          <div class="notice-topline">
-            <span class="eyebrow">Before You Begin</span>
-            <button
-              class="notice-close"
-              id="btnCloseNotice"
-              title="Close notice"
-              type="button"
-              hidden
-            >
-              Close &times;
-            </button>
-          </div>
-
-          <h2 class="notice-title">AI-assisted assessment runner</h2>
-          <p class="notice-lede">
-            Reads questions on the page, queries your selected Google Gemini
-            model, and selects verified answers. Never submits an empty or
-            failed attempt.
-          </p>
-
-          <ol class="notice-list">
-            <li class="notice-item">
-              <span class="notice-num">01</span>
-              <div class="notice-text">
-                <strong>Direct browser-to-Google requests</strong>
-                <p>
-                  Your Gemini API key is stored locally in browser storage and
-                  sent directly to Google's API endpoint.
-                </p>
-              </div>
-            </li>
-            <li class="notice-item">
-              <span class="notice-num">02</span>
-              <div class="notice-text">
-                <strong>Verify critical results</strong>
-                <p>
-                  AI responses can occasionally be inaccurate. Use the live
-                  inspector and activity console to review answers.
-                </p>
-              </div>
-            </li>
-            <li class="notice-item">
-              <span class="notice-num">03</span>
-              <div class="notice-text">
-                <strong>Your responsibility</strong>
-                <p>
-                  Use this extension in accordance with your institution or
-                  organization's guidelines.
-                </p>
-              </div>
-            </li>
-          </ol>
-
-          <button class="btn btn-accept" id="btnAcceptNotice" type="button">
-            <span id="btnAcceptText">I understand — open dashboard</span>
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
+          <svg class="notice-leaf" viewBox="0 0 120 120" aria-hidden="true">
+            <path
+              d="M96 10C65 18 42 38 31 69c19 10 43 3 55-15 11-17 12-31 10-44Z"
+              fill="currentColor"
+            />
+            <path
+              d="M30 92c14-27 35-47 61-60"
               fill="none"
               stroke="currentColor"
               stroke-width="2.2"
-              aria-hidden="true"
-            >
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-              <polyline points="12 5 19 12 12 19"></polyline>
-            </svg>
-          </button>
+              stroke-linecap="round"
+            />
+          </svg>
+
+          <div class="notice-inner">
+            <div class="notice-topline">
+              <span class="eyebrow">Before you begin</span>
+              <button
+                class="notice-close"
+                id="btnCloseNotice"
+                title="Close notice"
+                type="button"
+                hidden
+              >
+                Close &times;
+              </button>
+            </div>
+
+            <h2 class="notice-title" id="noticeTitle">
+              AI-assisted assessment runner
+            </h2>
+            <p class="notice-lede">
+              Reads questions on the page, queries your selected Google Gemini
+              model, and selects verified answers. It never submits an empty or
+              failed attempt.
+            </p>
+
+            <ol class="notice-list">
+              <li class="notice-item">
+                <span class="notice-num">01</span>
+                <div class="notice-text">
+                  <strong>Direct browser-to-Google requests</strong>
+                  <p>
+                    Your Gemini API key is stored locally in browser storage
+                    and sent directly to Google's API endpoint.
+                  </p>
+                </div>
+              </li>
+              <li class="notice-item">
+                <span class="notice-num">02</span>
+                <div class="notice-text">
+                  <strong>Verify critical results</strong>
+                  <p>
+                    AI responses can occasionally be inaccurate. Use the live
+                    inspector and activity console to review answers.
+                  </p>
+                </div>
+              </li>
+              <li class="notice-item">
+                <span class="notice-num">03</span>
+                <div class="notice-text">
+                  <strong>Your responsibility</strong>
+                  <p>
+                    Use this extension in accordance with your institution or
+                    organization's guidelines.
+                  </p>
+                </div>
+              </li>
+            </ol>
+
+            <button class="btn btn-accept" id="btnAcceptNotice" type="button">
+              <span id="btnAcceptText">I understand — open the dashboard</span>
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                aria-hidden="true"
+              >
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </button>
+
+            <p class="notice-footnote">
+              You can reopen this notice anytime from Privacy in the footer.
+            </p>
+          </div>
         </div>
       </main>
 
@@ -149,71 +171,87 @@
           <span>Open an Infosys Springboard quiz or assessment tab first.</span>
         </div>
 
-        <section class="status-card panel" id="statusCard">
-          <div class="status-icon" id="statusIcon">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </div>
-          <div class="status-content">
-            <span class="status-label">Current Status</span>
-            <p class="status-text" id="statusText" aria-live="polite">
-              Ready to start
-            </p>
-          </div>
-        </section>
+        <section class="hero-card" aria-label="Assessment status">
+          <section class="status-card panel" id="statusCard">
+            <div class="status-icon" id="statusIcon">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+            </div>
+            <div class="status-content">
+              <span class="status-label">Current status</span>
+              <p class="status-text" id="statusText" aria-live="polite">
+                Ready to start
+              </p>
+            </div>
+          </section>
 
-        <section class="progress-section panel" id="progressSection" hidden>
-          <div class="progress-labels">
-            <span class="prog-label">Assessment Progress</span>
-            <span class="prog-count" id="progCount">0 / 0</span>
-          </div>
-          <div class="progress-bar-track">
-            <div class="progress-bar-fill" id="progressFill"></div>
-          </div>
-          <div class="progress-meta">
-            <span class="meta-badge done" id="doneBadge">
-              <span class="meta-value" id="doneCount">0</span> solved
-            </span>
-            <span class="meta-badge quiz" id="quizBadge">
-              <span id="quizBadgeModelText">Gemini</span>
-            </span>
-          </div>
+          <section class="progress-section" id="progressSection" hidden>
+            <div class="progress-labels">
+              <span class="prog-label">Assessment progress</span>
+              <span class="prog-count" id="progCount">0 / 0</span>
+            </div>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-meta">
+              <span class="meta-badge done" id="doneBadge">
+                <span class="meta-value" id="doneCount">0</span> solved
+              </span>
+              <span class="meta-badge quiz" id="quizBadge">
+                <span id="quizBadgeModelText">Gemini</span>
+              </span>
+            </div>
+          </section>
         </section>
 
         <section class="engine-panel panel" id="aiConfigCard">
           <div class="panel-head">
             <div class="engine-title-wrap">
-              <span class="eyebrow">Gemini Engine</span>
+              <span class="eyebrow">AI engine</span>
               <span class="engine-state" id="engineState">On</span>
             </div>
-            <label class="switch" title="Enable or disable the AI solver">
-              <input type="checkbox" id="aiQuizToggle" checked />
-              <span class="slider"></span>
-            </label>
+            <div class="engine-head-actions">
+              <span class="engine-model" id="engineModelLabel">Gemini 2.5 Flash</span>
+              <label class="switch" title="Enable or disable the AI solver">
+                <input
+                  type="checkbox"
+                  id="aiQuizToggle"
+                  checked
+                  aria-label="Enable AI assessment solver"
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
           </div>
 
-          <div class="engine-body" id="aiCardBody">
+          <div class="engine-summary">
+            <span class="key-status" id="keyStatusText" role="status"
+              >No key saved</span
+            >
+            <button
+              class="engine-edit"
+              id="btnToggleEngine"
+              type="button"
+              aria-expanded="false"
+              aria-controls="aiCardBody"
+            >
+              Configure
+            </button>
+          </div>
+
+          <div class="engine-body" id="aiCardBody" hidden>
             <div class="field">
-              <div class="field-top">
-                <label class="field-label" for="modelSelect">Model</label>
-                <a
-                  href="https://aistudio.google.com/app/apikey"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="helper-link"
-                  >Get API key &nearr;</a
-                >
-              </div>
+              <label class="field-label" for="modelSelect">Model</label>
               <select id="modelSelect" class="select">
                 <option value="gemini-2.5-flash" selected>
                   Gemini 2.5 Flash (Recommended)
@@ -237,7 +275,16 @@
             </div>
 
             <div class="field">
-              <label class="field-label" for="geminiApiKey">API Key</label>
+              <div class="field-top">
+                <label class="field-label" for="geminiApiKey">API key</label>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="helper-link"
+                  >Get a key &nearr;</a
+                >
+              </div>
               <div class="key-row">
                 <div class="key-wrap">
                   <input
@@ -263,9 +310,10 @@
               </div>
             </div>
 
-            <div class="key-feedback">
-              <span class="key-status" id="keyStatusText">No key saved</span>
-            </div>
+            <p class="engine-note">
+              Your key stays in local extension storage and is sent only to
+              Google's Gemini API.
+            </p>
           </div>
         </section>
 
@@ -310,13 +358,24 @@
         </section>
 
         <aside class="refresh-tip">
-          <div class="tip-head">
-            <span class="tip-label">Fullscreen Shortcut</span>
-            <kbd class="kbd-shortcut">Alt + S</kbd>
-          </div>
+          <svg
+            class="tip-icon"
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            aria-hidden="true"
+          >
+            <rect x="3" y="4" width="18" height="13" rx="2"></rect>
+            <path d="M8 21h8"></path>
+            <path d="M12 17v4"></path>
+          </svg>
           <p class="tip-text">
-            Use the floating corner HUD or press <strong>Alt + S</strong> to
-            start, pause, and inspect live Gemini prompts &amp; answers.
+            <strong>Fullscreen HUD</strong> Press
+            <kbd class="kbd-shortcut">Alt + S</kbd> to start, pause, and inspect
+            live Gemini prompts &amp; answers.
           </p>
         </aside>
 
@@ -324,7 +383,7 @@
           <div class="log-header">
             <div class="log-title-wrap">
               <span class="log-dot"></span>
-              <span>Activity Console</span>
+              <span>Activity console</span>
             </div>
             <button class="clear-btn" id="clearLog" type="button">Clear</button>
           </div>
@@ -335,34 +394,75 @@
           </div>
         </section>
 
-        <div class="personal-stats-bar" id="personalStatsBar">
-          <span>Saved <strong id="statTimeSaved">0m</strong></span>
-          <span class="stats-sep">&middot;</span>
-          <span><strong id="statQuestions">0</strong> solved</span>
-          <span class="stats-sep">&middot;</span>
-          <span><strong id="statAssessments">0</strong> assessments</span>
-        </div>
-
-        <div class="oss-support-bar">
-          <a
-            class="oss-pill oss-pill-star"
-            href="https://github.com/OjasD07/SpringBored"
-            target="_blank"
-            rel="noopener noreferrer"
-            >&#9733; Star the Repo</a
-          >
-          <a
-            class="oss-pill oss-pill-sponsor"
-            href="https://sponsor.ojasdeshpande.in/"
-            target="_blank"
-            rel="noopener noreferrer"
-            >&#9829; Support my OSS</a
-          >
+        <div
+          class="personal-stats-bar"
+          id="personalStatsBar"
+          aria-label="Personal impact"
+        >
+          <div class="stat">
+            <svg
+              class="stat-icon"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M12 7v5l3 2"></path>
+            </svg>
+            <div class="stat-copy">
+              <span class="stat-value" id="statTimeSaved">0m</span>
+              <span class="stat-label">Time saved</span>
+            </div>
+          </div>
+          <div class="stat">
+            <svg
+              class="stat-icon"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="m8 12 2.5 2.5L16 9"></path>
+            </svg>
+            <div class="stat-copy">
+              <span class="stat-value" id="statQuestions">0</span>
+              <span class="stat-label">Solved</span>
+            </div>
+          </div>
+          <div class="stat">
+            <svg
+              class="stat-icon"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <rect x="5" y="3" width="14" height="18" rx="2"></rect>
+              <path d="M9 8h6"></path>
+              <path d="M9 12h6"></path>
+              <path d="M9 16h4"></path>
+            </svg>
+            <div class="stat-copy">
+              <span class="stat-value" id="statAssessments">0</span>
+              <span class="stat-label">Assessments</span>
+            </div>
+          </div>
         </div>
       </main>
 
       <footer class="site-footer">
-        <p class="footer-copy">
+        <p class="footer-brand-row">
           <a
             class="footer-brand"
             href="https://springbored.ojasdeshpande.in/"
@@ -380,23 +480,31 @@
           >
         </p>
         <div class="footer-links-row">
-          <span class="footer-ver" id="currentVersionLabel">v1.0.0</span>
+          <span class="footer-ver" id="currentVersionLabel">v1.1.0</span>
           <span class="stats-sep">&middot;</span>
-          <button
-            class="link-btn footer-privacy"
-            id="btnCheckUpdate"
-            type="button"
-          >
-            Check updates
+          <button class="link-btn" id="btnCheckUpdate" type="button">
+            Updates
           </button>
           <span class="stats-sep">&middot;</span>
-          <button
-            class="link-btn footer-privacy"
-            id="btnOpenNotice"
-            type="button"
-          >
-            Privacy &amp; terms
+          <button class="link-btn" id="btnOpenNotice" type="button">
+            Privacy
           </button>
+          <span class="stats-sep">&middot;</span>
+          <a
+            class="footer-support"
+            href="https://github.com/OjasD07/SpringBored"
+            target="_blank"
+            rel="noopener noreferrer"
+            >&#9733; Star</a
+          >
+          <span class="stats-sep">&middot;</span>
+          <a
+            class="footer-support sponsor"
+            href="https://sponsor.ojasdeshpande.in/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >&#9829; Sponsor</a
+          >
         </div>
       </footer>
     </div>

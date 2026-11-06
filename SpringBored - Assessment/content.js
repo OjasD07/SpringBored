@@ -1,4 +1,4 @@
-// SpringBored (Assessment Edition) - Content Script v1.0.0
+// SpringBored (Assessment Edition) - Content Script v1.1.0
 // Autonomous Quiz, Test, and Multi-Section Assessment (IAP) Solver
 // Powered by Google Gemini AI.
 
@@ -942,10 +942,10 @@ Respond ONLY with valid JSON:
               <span class="sb-hud-model" id="sbHudModel">Gemini</span>
             </div>
             <div class="sb-hud-header-tools">
-              <button class="sb-hud-tool-btn" id="sbHudPosBtn" title="Switch Corner (Bottom-Right / Bottom-Left / Top-Left)">⇋</button>
-              <button class="sb-hud-tool-btn" id="sbHudExpandBtn" title="Enlarge & Inspect Live Gemini AI Communication">⤢</button>
-              <button class="sb-hud-tool-btn" id="sbHudMinBtn" title="Minimize / Expand">_</button>
-              <button class="sb-hud-tool-btn" id="sbHudCloseBtn" title="Close Widget">✕</button>
+              <button class="sb-hud-tool-btn" id="sbHudPosBtn" title="Switch Corner (Bottom-Right / Bottom-Left / Top-Left)" aria-label="Switch corner"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>
+              <button class="sb-hud-tool-btn" id="sbHudExpandBtn" title="Enlarge & Inspect Live Gemini AI Communication" aria-label="Expand inspector"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+              <button class="sb-hud-tool-btn" id="sbHudMinBtn" title="Minimize / Expand" aria-label="Minimize"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+              <button class="sb-hud-tool-btn" id="sbHudCloseBtn" title="Close Widget" aria-label="Close"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </div>
           </div>
           <div class="sb-hud-update-banner" id="sbHudUpdateBanner" style="display:none;">
@@ -957,7 +957,7 @@ Respond ONLY with valid JSON:
               <a
                 class="sb-hud-update-link"
                 id="sbHudUpdateLink"
-                href="https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0"
+                href="https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.1.0"
                 target="_blank"
                 rel="noopener noreferrer"
                 >Update &nearr;</a
@@ -1000,39 +1000,38 @@ Respond ONLY with valid JSON:
                 </div>
               </div>
             </div>
-          </div>
-          <div class="sb-hud-oss-row">
-            <a
-              class="sb-hud-oss-btn star"
-              href="https://github.com/OjasD07/SpringBored"
-              target="_blank"
-              rel="noopener noreferrer"
-              >&#9733; Star the Repo</a
-            >
-            <a
-              class="sb-hud-oss-btn sponsor"
-              href="https://sponsor.ojasdeshpande.in/"
-              target="_blank"
-              rel="noopener noreferrer"
-              >&#9829; Support my OSS</a
-            >
-          </div>
-          <div class="sb-hud-footer">
-            <a
-              class="sb-hud-footer-brand"
-              href="https://springbored.ojasdeshpande.in/"
-              target="_blank"
-              rel="noopener noreferrer"
-              >SpringBored</a
-            >
-            <span>&copy;</span>
-            <span id="sbHudCopyrightYear">2026</span>
-            <a
-              href="https://www.ojasdeshpande.in/"
-              target="_blank"
-              rel="noopener noreferrer"
-              >Ojas Shailesh Deshpande</a
-            >
+            <div class="sb-hud-footer">
+              <a
+                class="sb-hud-footer-brand"
+                href="https://springbored.ojasdeshpande.in/"
+                target="_blank"
+                rel="noopener noreferrer"
+                >SpringBored</a
+              >
+              <span>&middot;</span>
+              <a
+                href="https://www.ojasdeshpande.in/"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Ojas Deshpande</a
+              >
+              <span>&middot;</span>
+              <a
+                class="sb-hud-support star"
+                href="https://github.com/OjasD07/SpringBored"
+                target="_blank"
+                rel="noopener noreferrer"
+                >&#9733; Star</a
+              >
+              <span>&middot;</span>
+              <a
+                class="sb-hud-support sponsor"
+                href="https://sponsor.ojasdeshpande.in/"
+                target="_blank"
+                rel="noopener noreferrer"
+                >&#9829; Sponsor</a
+              >
+            </div>
           </div>
         </div>
       `;
@@ -1049,18 +1048,30 @@ Respond ONLY with valid JSON:
           touch-action: none;
         }
         .sb-hud-bar {
-          background: linear-gradient(180deg, #244534 0%, #162b21 100%);
-          border: 1px solid #355d48;
-          border-top: 2px solid #e5a952;
-          border-radius: 10px;
-          padding: 11px 14px;
+          position: relative;
+          overflow: hidden;
+          background: linear-gradient(180deg, #1b3426 0%, #112319 100%);
+          border: 1px solid #2e4d3b;
+          border-radius: 13px;
+          padding: 12px 14px;
           width: 316px;
-          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
-          color: #f3ebd3;
+          box-shadow: 0 18px 44px rgba(0, 0, 0, 0.52);
+          color: #f3ead6;
           display: flex;
           flex-direction: column;
           gap: 9px;
           transition: width 0.22s ease, max-height 0.22s ease;
+        }
+        .sb-hud-bar::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 16px;
+          right: 16px;
+          height: 2px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #e0a84e 0%, #e6926d 100%);
+          pointer-events: none;
         }
         #springbored-assessment-hud.sb-hud-enlarged .sb-hud-bar {
           width: 536px;
@@ -1073,7 +1084,7 @@ Respond ONLY with valid JSON:
           justify-content: space-between;
           cursor: grab;
           padding-bottom: 7px;
-          border-bottom: 1px solid #2e523f;
+          border-bottom: 1px solid #254131;
         }
         .sb-hud-header:active {
           cursor: grabbing;
@@ -1087,7 +1098,7 @@ Respond ONLY with valid JSON:
           width: 24px;
           height: 24px;
           flex-shrink: 0;
-          border-radius: 5px;
+          border-radius: 6px;
           object-fit: cover;
           border: 1px solid rgba(243, 235, 211, 0.55);
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
@@ -1095,9 +1106,9 @@ Respond ONLY with valid JSON:
           background: #244534;
         }
         .sb-hud-title {
-          color: #f3ebd3;
+          color: #f3ead6;
           font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-          font-size: 14px;
+          font-size: 14.5px;
           font-weight: 700;
           letter-spacing: -0.2px;
         }
@@ -1107,11 +1118,11 @@ Respond ONLY with valid JSON:
           font-weight: 600;
           letter-spacing: 0.45px;
           text-transform: uppercase;
-          background: rgba(229, 169, 82, 0.16);
-          color: #e5a952;
+          background: rgba(224, 168, 78, 0.14);
+          color: #e0a84e;
           padding: 2px 6px;
           border-radius: 4px;
-          border: 1px solid rgba(229, 169, 82, 0.42);
+          border: 1px solid rgba(224, 168, 78, 0.42);
         }
         .sb-hud-header-tools {
           display: flex;
@@ -1119,22 +1130,24 @@ Respond ONLY with valid JSON:
           gap: 3px;
         }
         .sb-hud-tool-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
           background: transparent;
           border: 1px solid transparent;
-          color: #98b09f;
+          color: #a2b7a8;
           cursor: pointer;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          font-size: 11.5px;
-          font-weight: 700;
-          padding: 2px 5px;
-          border-radius: 4px;
+          padding: 0;
+          border-radius: 5px;
           line-height: 1;
           transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
         }
         .sb-hud-tool-btn:hover {
-          color: #f3ebd3;
-          background: #274a39;
-          border-color: #3d6952;
+          color: #f3ead6;
+          background: #223f2f;
+          border-color: #39604b;
         }
         .sb-hud-content {
           display: flex;
@@ -1183,11 +1196,11 @@ Respond ONLY with valid JSON:
           gap: 6px;
         }
         .sb-hud-action-btn {
-          background: linear-gradient(180deg, #eca07c 0%, #e6926d 50%, #df825a 100%);
+          background: linear-gradient(180deg, #ecc071 0%, #d99d38 100%);
           border: 1px solid #f3ebd3;
-          border-radius: 6px;
+          border-radius: 8px;
           color: #162b21;
-          padding: 9px 12px;
+          padding: 10px 12px;
           font-size: 12px;
           font-weight: 700;
           cursor: pointer;
@@ -1198,12 +1211,12 @@ Respond ONLY with valid JSON:
           box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
         }
         .sb-hud-action-btn:hover {
-          background: linear-gradient(180deg, #f2b091 0%, #eca07c 100%);
+          background: linear-gradient(180deg, #f2cd88 0%, #e5a84a 100%);
           transform: translateY(-1px);
           box-shadow: 0 5px 16px rgba(0, 0, 0, 0.35);
         }
         .sb-hud-action-btn.active {
-          background: linear-gradient(180deg, #ecc071 0%, #e5a952 100%);
+          background: linear-gradient(180deg, #f0ad8c 0%, #df825a 100%);
           border-color: #f3ebd3;
           color: #162b21;
           box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
@@ -1508,66 +1521,40 @@ Respond ONLY with valid JSON:
           align-items: center;
           justify-content: center;
           text-align: center;
-          gap: 4px;
+          gap: 5px;
           margin-top: 2px;
-          padding-top: 8px;
-          border-top: 1px solid #2e523f;
-          color: #98b09f;
+          padding-top: 7px;
+          border-top: 1px solid #254131;
+          color: #829a8b;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          font-size: 8.5px;
-          letter-spacing: 0.15px;
+          font-size: 8px;
+          letter-spacing: 0.25px;
         }
         .sb-hud-footer a {
-          color: #d4dfd0;
+          color: #a2b7a8;
           text-decoration: none;
-          border-bottom: 1px solid rgba(212, 223, 208, 0.35);
+          border-bottom: 1px solid transparent;
           transition: color 0.15s ease, border-color 0.15s ease;
         }
         .sb-hud-footer a:hover {
-          color: #e5a952;
-          border-color: #e5a952;
+          color: #e0a84e;
+          border-color: #e0a84e;
         }
         .sb-hud-footer-brand {
+          font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+          font-size: 10px;
           font-weight: 700;
-          color: #f3ebd3 !important;
+          color: #f3ead6 !important;
         }
-        .sb-hud-oss-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 6px;
-          margin-top: 2px;
-        }
-        .sb-hud-oss-btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 4px;
-          padding: 4px 6px;
-          border-radius: 5px;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          font-size: 8.5px;
+        .sb-hud-support.star {
+          color: #e0a84e !important;
           font-weight: 700;
-          text-decoration: none !important;
-          transition: transform 0.12s ease, background 0.15s ease;
+          text-transform: uppercase;
         }
-        .sb-hud-oss-btn:hover {
-          transform: translateY(-1px);
-        }
-        .sb-hud-oss-btn.star {
-          background: rgba(229, 169, 82, 0.14);
-          border: 1px solid rgba(229, 169, 82, 0.42);
-          color: #e5a952 !important;
-        }
-        .sb-hud-oss-btn.star:hover {
-          background: rgba(229, 169, 82, 0.24);
-        }
-        .sb-hud-oss-btn.sponsor {
-          background: rgba(230, 146, 109, 0.16);
-          border: 1px solid rgba(230, 146, 109, 0.45);
+        .sb-hud-support.sponsor {
           color: #e6926d !important;
-        }
-        .sb-hud-oss-btn.sponsor:hover {
-          background: rgba(230, 146, 109, 0.26);
+          font-weight: 700;
+          text-transform: uppercase;
         }
         .sb-hud-update-banner {
           display: flex;
@@ -1646,7 +1633,7 @@ Respond ONLY with valid JSON:
           if (hudUpdateBadge) hudUpdateBadge.textContent = `v${info.latestVersion}`;
           if (hudUpdateText) hudUpdateText.textContent = `Update v${info.latestVersion} available`;
           if (hudUpdateLink) {
-            hudUpdateLink.href = info.releaseUrl || "https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.0.0";
+            hudUpdateLink.href = info.releaseUrl || "https://github.com/OjasD07/SpringBored/releases#release-assessment-v1.1.0";
           }
         } else {
           hudUpdateBanner.style.display = "none";
@@ -1749,7 +1736,7 @@ Respond ONLY with valid JSON:
           hud.classList.add("sb-hud-enlarged");
           if (inspector) inspector.style.display = "flex";
           if (expandBtn) {
-            expandBtn.textContent = "⤡";
+            expandBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
             expandBtn.title = "Shrink / Compact Window";
           }
           if (toggleRowBtn) {
@@ -1771,7 +1758,7 @@ Respond ONLY with valid JSON:
           hud.classList.remove("sb-hud-enlarged");
           if (inspector) inspector.style.display = "none";
           if (expandBtn) {
-            expandBtn.textContent = "⤢";
+            expandBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
             expandBtn.title = "Enlarge & Inspect Live Gemini AI Communication";
           }
           if (toggleRowBtn) {
@@ -1856,7 +1843,9 @@ Respond ONLY with valid JSON:
         const content = document.getElementById("sbHudContent");
         const isHidden = content.style.display === "none";
         content.style.display = isHidden ? "flex" : "none";
-        minBtn.textContent = isHidden ? "_" : "□";
+        minBtn.innerHTML = isHidden
+          ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+          : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>';
       });
 
       // ── Close Button ──
